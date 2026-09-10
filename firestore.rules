@@ -1,0 +1,46 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Helper functions
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+
+    // Regla global de usuarios: cada usuario solo accede a su propio espacio de datos
+    match /users/{userId} {
+      allow read, write: if isOwner(userId);
+
+      // Subcolecciones de métricas y datos financieros
+      match /deliveries/{deliveryId} {
+        allow read, write: if isOwner(userId);
+      }
+
+      match /debts/{debtId} {
+        allow read, write: if isOwner(userId);
+      }
+
+      match /expenses/{expenseId} {
+        allow read, write: if isOwner(userId);
+      }
+
+      match /raw/{rawId} {
+        allow read, write: if isOwner(userId);
+      }
+
+      // Configuración del perfil de usuario (precio por entrega, etc.)
+      match /settings/{settingId} {
+        allow read, write: if isOwner(userId);
+      }
+    }
+
+    // Denegar cualquier otro acceso por defecto
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
