@@ -24,6 +24,14 @@ const patterns = {
 
 /** Converts the known WhatsApp report format (single, multi, or chat export) into validated domain candidates. */
 export function parseWhatsAppMessage(message: string, targetCourier?: string): ParseResult {
+  if (typeof message !== "string" || message.trim().length === 0) {
+    return { success: false, error: "El mensaje no puede estar vacío." };
+  }
+
+  if (message.length > 500_000) {
+    return { success: false, error: "El mensaje excede el tamaño máximo permitido (500 KB)." };
+  }
+
   const chunks = splitIntoReportChunks(message);
 
   if (chunks.length === 0) {

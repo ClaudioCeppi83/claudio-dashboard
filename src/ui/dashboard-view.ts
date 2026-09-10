@@ -32,6 +32,16 @@ const ICONS = {
   google: `<svg viewBox="0 0 24 24" fill="currentColor"><path d="M12.48 10.92v3.28h7.84c-.24 1.84-.853 3.187-1.787 4.133-1.147 1.147-2.933 2.4-6.053 2.4-4.827 0-8.6-3.893-8.6-8.72s3.773-8.72 8.6-8.72c2.6 0 4.507 1.027 5.907 2.347l2.307-2.307C18.747 1.44 15.987 0 12.48 0 5.867 0 .307 5.387.307 12s5.56 12 12.173 12c3.573 0 6.267-1.173 8.373-3.36 2.16-2.16 2.84-5.213 2.84-7.667 0-.76-.053-1.467-.173-2.053H12.48z"/></svg>`,
 };
 
+/** Sanitizes any user-supplied string to prevent DOM-based XSS (CWE-79). */
+export function escapeHtml(str: string): string {
+  return str
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#039;");
+}
+
 export class DashboardView {
   private readonly root: HTMLElement;
   private options?: DashboardViewOptions;
@@ -65,10 +75,12 @@ export class DashboardView {
       currency: "EUR",
     });
 
-    const firstName = this.currentUser?.displayName
+    const rawFirstName = this.currentUser?.displayName
       ? this.currentUser.displayName.trim().split(" ")[0]
       : null;
-    const greetingText = firstName ? `Hola, ${firstName}` : "Hola, Invitado";
+    const greetingText = rawFirstName
+      ? `Hola, ${escapeHtml(rawFirstName)}`
+      : "Hola, Invitado";
 
     let syncBadgeHtml = `<span class="sync-badge local"><span class="sync-dot"></span>Modo Local</span>`;
     if (this.currentUser) {
@@ -83,12 +95,15 @@ export class DashboardView {
         : a.date.localeCompare(b.date);
     });
 
+    const safeMonthName = escapeHtml(summary.monthName);
+
     const dailyRows = sortedDaily.length > 0
       ? sortedDaily.map((day) => {
+          const safeDate = escapeHtml(day.formattedDate);
           if (day.isRestDay) {
             return `
               <tr class="rest-day-row">
-                <td>${day.formattedDate}</td>
+                <td>${safeDate}</td>
                 <td class="align-center"><span class="badge-rest">Día libre</span></td>
                 <td class="align-right muted-dash">—</td>
               </tr>
@@ -96,7 +111,7 @@ export class DashboardView {
           }
           return `
             <tr>
-              <td>${day.formattedDate}</td>
+              <td>${safeDate}</td>
               <td class="align-center">${day.deliveries}</td>
               <td class="align-right">${money.format(day.grossIncome)}</td>
             </tr>
@@ -114,8 +129,8 @@ export class DashboardView {
                 <span>${greetingText}</span>
                 ${syncBadgeHtml}
               </div>
-              <div class="month-capsule" role="button" aria-haspopup="dialog" aria-label="${summary.monthName} — Cambiar mes">
-                <h1 id="month-title">${summary.monthName}</h1>
+              <div class="month-capsule" role="button" aria-haspopup="dialog" aria-label="${safeMonthName} — Cambiar mes">
+                <h1 id="month-title">${safeMonthName}</h1>
                 ${ICONS.chevronDown}
                 <input type="month" id="month-picker" value="${summary.month}" aria-label="Seleccionar mes" />
               </div>
@@ -133,8 +148,8 @@ export class DashboardView {
             ${
               this.currentUser
                 ? `<div class="menu-user-card">
-                    <span class="menu-user-name">${this.currentUser.displayName || "Usuario en la nube"}</span>
-                    <span class="menu-user-email">${this.currentUser.email || ""}</span>
+                    <span class="menu-user-name">${escapeHtml(this.currentUser.displayName || "Usuario en la nube")}</span>
+                    <span class="menu-user-email">${escapeHtml(this.currentUser.email || "")}</span>
                   </div>
                   <button id="auth-logout" class="menu-item" role="menuitem">
                     ${ICONS.user} Cerrar sesión
@@ -149,10 +164,10 @@ export class DashboardView {
             <button id="export-backup" class="menu-item" role="menuitem">
               ${ICONS.download} Exportar copia (.cld)
             </button>
-            <label for="import-file" class="menu-item" role="menuitem">
+            <button id="import-trigger" class="menu-item" role="menuitem">
               ${ICONS.upload} Importar copia (.cld)
-              <input type="file" id="import-file" accept=".cld,.json,.txt" style="display:none" />
-            </label>
+            </button>
+            <input type="file" id="import-file" accept=".cld,.json,.txt" style="display:none" aria-hidden="true" />
             <button id="clear-data" class="menu-item danger" role="menuitem">
               ${ICONS.trash} Restablecer datos
             </button>
@@ -469,6 +484,10 @@ export class DashboardView {
     });
 
     // Import Backup
+    this.root.querySelector("#import-trigger")?.addEventListener("click", () => {
+      this.root.querySelector<HTMLInputElement>("#import-file")?.click();
+    });
+
     this.root.querySelector("#import-file")?.addEventListener("change", async (e) => {
       const input = e.target as HTMLInputElement;
       const file = input.files?.[0];
@@ -510,7 +529,7 @@ export class DashboardView {
         <div class="cloud-banner-icon">${ICONS.upload}</div>
         <div class="cloud-banner-text">
           <h4>Sincronizar datos locales</h4>
-          <p>Tienes ${count} registro(s) guardado(s) en este navegador. ¿Deseas subirlos a tu cuenta de Google Cloud?</p>
+          <p>Tienes ${Math.max(0, Math.floor(Number(count) || 0))} registro(s) guardado(s) en este navegador. ¿Deseas subirlos a tu cuenta de Google Cloud?</p>
         </div>
       </div>
       <div class="cloud-banner-actions">

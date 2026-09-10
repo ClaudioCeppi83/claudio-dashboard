@@ -2,7 +2,7 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    // Helper functions
+    // Helper functions de autenticación y autorización
     function isAuthenticated() {
       return request.auth != null;
     }
@@ -11,30 +11,92 @@ service cloud.firestore {
       return isAuthenticated() && request.auth.uid == userId;
     }
 
+    function isValidString(val, minLen, maxLen) {
+      return val is string && val.size() >= minLen && val.size() <= maxLen;
+    }
+
+    function isValidDate(dateStr) {
+      return dateStr is string && dateStr.matches('^[0-9]{4}-[0-9]{2}-[0-9]{2}$');
+    }
+
+    function isValidDelivery() {
+      let data = request.resource.data;
+      return data.keys().hasOnly(['id', 'courier', 'route', 'date', 'received', 'incidents', 'delivered', 'rawMessageId'])
+        && isValidString(data.id, 1, 100)
+        && isValidString(data.courier, 1, 100)
+        && isValidString(data.route, 0, 50)
+        && isValidDate(data.date)
+        && data.received is int && data.received >= 0 && data.received <= 100000
+        && data.incidents is int && data.incidents >= 0 && data.incidents <= 100000
+        && data.delivered is int && data.delivered >= 0 && data.delivered <= 100000
+        && isValidString(data.rawMessageId, 1, 100);
+    }
+
+    function isValidDebt() {
+      let data = request.resource.data;
+      return data.keys().hasOnly(['id', 'amount', 'date', 'description'])
+        && isValidString(data.id, 1, 100)
+        && (data.amount is number) && data.amount > 0 && data.amount <= 1000000
+        && isValidDate(data.date)
+        && (!('description' in data) || isValidString(data.description, 0, 255));
+    }
+
+    function isValidExpense() {
+      let data = request.resource.data;
+      return data.keys().hasOnly(['id', 'amount', 'date', 'description', 'recurring'])
+        && isValidString(data.id, 1, 100)
+        && (data.amount is number) && data.amount >= 0 && data.amount <= 1000000
+        && isValidDate(data.date)
+        && isValidString(data.description, 1, 255)
+        && data.recurring is bool;
+    }
+
+    function isValidRaw() {
+      let data = request.resource.data;
+      return data.keys().hasOnly(['id', 'receivedAt', 'content'])
+        && isValidString(data.id, 1, 100)
+        && isValidString(data.receivedAt, 1, 100)
+        && isValidString(data.content, 0, 50000);
+    }
+
+    function isValidSettings() {
+      let data = request.resource.data;
+      return data.keys().hasOnly(['id', 'pricePerDelivery', 'currency'])
+        && (!('id' in data) || isValidString(data.id, 1, 100))
+        && (data.pricePerDelivery is number)
+        && data.pricePerDelivery >= 0 && data.pricePerDelivery <= 10000
+        && isValidString(data.currency, 1, 10);
+    }
+
     // Regla global de usuarios: cada usuario solo accede a su propio espacio de datos
     match /users/{userId} {
-      allow read, write: if isOwner(userId);
+      allow read, delete: if isOwner(userId);
 
-      // Subcolecciones de métricas y datos financieros
+      // Subcolecciones de métricas y datos financieros con validación de esquema estricta
       match /deliveries/{deliveryId} {
-        allow read, write: if isOwner(userId);
+        allow read, delete: if isOwner(userId);
+        allow create, update: if isOwner(userId) && isValidDelivery();
       }
 
       match /debts/{debtId} {
-        allow read, write: if isOwner(userId);
+        allow read, delete: if isOwner(userId);
+        allow create, update: if isOwner(userId) && isValidDebt();
       }
 
       match /expenses/{expenseId} {
-        allow read, write: if isOwner(userId);
+        allow read, delete: if isOwner(userId);
+        allow create, update: if isOwner(userId) && isValidExpense();
       }
 
       match /raw/{rawId} {
-        allow read, write: if isOwner(userId);
+        allow read, delete: if isOwner(userId);
+        allow create, update: if isOwner(userId) && isValidRaw();
       }
 
       // Configuración del perfil de usuario (precio por entrega, etc.)
       match /settings/{settingId} {
-        allow read, write: if isOwner(userId);
+        allow read, delete: if isOwner(userId);
+        allow create, update: if isOwner(userId) && isValidSettings();
       }
     }
 

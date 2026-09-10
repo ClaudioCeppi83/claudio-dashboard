@@ -2,11 +2,11 @@
 
 > Progressive Web Application for parcel couriers: automated WhatsApp report ingestion, real-time financial tracking, debt deduction, and multi-device Google Cloud Firestore synchronization.
 
-## Project Details
-- **Website**: https://claudio-dashboard-app.web.app/
-- **Repository**: https://github.com/ClaudioCeppi83/claudio-dashboard
-- **License**: MIT
-- **Primary Domain**: Courier logistics and personal micro-business financial balance
+## Project Resources
+- [Production Web Application](https://claudio-dashboard-app.web.app/)
+- [Source Code Repository](https://github.com/ClaudioCeppi83/claudio-dashboard)
+- [Web App Manifest](https://claudio-dashboard-app.web.app/manifest.webmanifest)
+- [Search Engine Sitemap](https://claudio-dashboard-app.web.app/sitemap.xml)
 
 ## Core Capabilities
 - **Smart WhatsApp Report Parsing**: Ingests individual daily reports or batch chats exported from WhatsApp, extracting delivery counts, routes, incidents, and automatically attributing reports to the active user.

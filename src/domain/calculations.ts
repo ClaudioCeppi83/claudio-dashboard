@@ -32,23 +32,35 @@ const MONTH_SHORT_NAMES = [
 ];
 
 function formatShortDate(dateStr: string): string {
+  if (typeof dateStr !== "string") return "";
   const parts = dateStr.split("-");
   if (parts.length !== 3) return dateStr;
   const day = Number.parseInt(parts[2] ?? "1", 10);
   const monthIdx = Number.parseInt(parts[1] ?? "1", 10) - 1;
-  return `${day} ${MONTH_SHORT_NAMES[monthIdx] ?? ""}`;
+  const shortMonth = monthIdx >= 0 && monthIdx < 12 ? (MONTH_SHORT_NAMES[monthIdx] ?? "") : "";
+  return `${day} ${shortMonth}`.trim();
 }
 
 /** Produces presentation-independent monthly financial metrics. */
 export function calculateMonth(data: DashboardData, month: string): MonthlySummary {
-  const deliveries = data.deliveries.filter((item) => item.date.startsWith(month));
-  const debts = data.debts.filter((item) => item.date.startsWith(month));
-  const expenses = data.expenses.filter((item) => item.date.startsWith(month));
+  const pricePerDelivery = Number.isFinite(data?.settings?.pricePerDelivery) && data.settings.pricePerDelivery >= 0
+    ? data.settings.pricePerDelivery
+    : 0.7;
 
-  const delivered = deliveries.reduce((sum, item) => sum + item.delivered, 0);
-  const grossIncome = delivered * data.settings.pricePerDelivery;
-  const debtTotal = debts.reduce((sum, item) => sum + item.amount, 0);
-  const expenseTotal = expenses.reduce((sum, item) => sum + item.amount, 0);
+  const deliveries = (data?.deliveries || []).filter(
+    (item) => typeof item?.date === "string" && item.date.startsWith(month) && Number.isFinite(item.delivered) && item.delivered >= 0,
+  );
+  const debts = (data?.debts || []).filter(
+    (item) => typeof item?.date === "string" && item.date.startsWith(month) && Number.isFinite(item.amount),
+  );
+  const expenses = (data?.expenses || []).filter(
+    (item) => typeof item?.date === "string" && item.date.startsWith(month) && Number.isFinite(item.amount),
+  );
+
+  const delivered = deliveries.reduce((sum, item) => sum + (Number.isFinite(item.delivered) ? item.delivered : 0), 0);
+  const grossIncome = Math.round(delivered * pricePerDelivery * 100) / 100;
+  const debtTotal = Math.round(debts.reduce((sum, item) => sum + (Number.isFinite(item.amount) ? item.amount : 0), 0) * 100) / 100;
+  const expenseTotal = Math.round(expenses.reduce((sum, item) => sum + (Number.isFinite(item.amount) ? item.amount : 0), 0) * 100) / 100;
   const daysWithDeliveries = new Set(deliveries.map((item) => item.date)).size;
 
   // Group deliveries by date
@@ -73,7 +85,7 @@ export function calculateMonth(data: DashboardData, month: string): MonthlySumma
       const count = dailyMap.get(dateKey);
 
       if (count !== undefined && count > 0) {
-        const income = count * data.settings.pricePerDelivery;
+        const income = count * pricePerDelivery;
         dailyBreakdown.push({
           date: dateKey,
           formattedDate: formatShortDate(dateKey),
@@ -93,9 +105,12 @@ export function calculateMonth(data: DashboardData, month: string): MonthlySumma
     }
   }
 
-  const [yearStr, monthStr] = month.split("-");
-  const monthIdx = Number.parseInt(monthStr ?? "1", 10) - 1;
-  const monthName = `${MONTH_NAMES[monthIdx] ?? "Mes"} ${yearStr ?? ""}`.trim();
+  const safeMonth = typeof month === "string" ? month : "";
+  const [yearStr, monthStr] = safeMonth.split("-");
+  const monthIdx = monthStr ? Number.parseInt(monthStr, 10) - 1 : -1;
+  const monthName = monthIdx >= 0 && monthIdx < 12 && MONTH_NAMES[monthIdx]
+    ? `${MONTH_NAMES[monthIdx]} ${yearStr ?? ""}`.trim()
+    : "Mes";
 
   return {
     month,
@@ -104,7 +119,7 @@ export function calculateMonth(data: DashboardData, month: string): MonthlySumma
     grossIncome,
     debts: debtTotal,
     expenses: expenseTotal,
-    net: grossIncome - debtTotal - expenseTotal,
+    net: Math.round((grossIncome - debtTotal - expenseTotal) * 100) / 100,
     daysWithDeliveries,
     averagePerActiveDay: daysWithDeliveries > 0 ? delivered / daysWithDeliveries : 0,
     dailyBreakdown,
