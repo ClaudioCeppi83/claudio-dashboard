@@ -1,6 +1,7 @@
 import "./styles.css";
 import { calculateMonth } from "./domain/calculations";
 import { processUploadedFile } from "./domain/importer";
+import type { Delivery } from "./domain/models";
 import { parseWhatsAppMessage } from "./domain/parser";
 import { BrowserStore } from "./infrastructure/browser-store";
 import { loginWithGoogle, logoutFirebase, subscribeToAuth } from "./infrastructure/firebase-config";
@@ -169,59 +170,91 @@ async function bootstrap(): Promise<void> {
       view.showSuccess("Copia de seguridad (.cld) descargada.");
     },
 
-    onImport: async (file) => {
-      try {
-        const current = await repository.load();
-        const targetCourier = getTargetCourier(current.settings.courierName, activeUser?.displayName);
-        const processed = await processUploadedFile(file, {
-          targetCourier,
-          currentMonth,
-        });
+		onImport: async (file) => {
+			try {
+				view.showImportLoading(file);
+				const current = await repository.load();
+				const targetCourier = getTargetCourier(
+					current.settings.courierName,
+					activeUser?.displayName,
+				);
+				const processed = await processUploadedFile(file, {
+					targetCourier,
+					currentMonth,
+				});
 
-        if (!processed.success) {
-          view.showError(processed.error || "Error al procesar el archivo.");
-          return;
-        }
+				if (!processed.success) {
+					view.showImportError(
+						file.name,
+						processed.error || "Error al procesar el archivo.",
+					);
+					return;
+				}
 
-        let addedCount = 0;
-        let duplicateCount = 0;
-        let lastDeliveryMonth = currentMonth;
+				const newDeliveries: Delivery[] = [];
+				let duplicateCount = 0;
 
-        for (const delivery of processed.deliveries) {
-          const isDuplicate = current.deliveries.some(
-            (existing) =>
-              existing.courier.toLowerCase() === delivery.courier.toLowerCase() &&
-              existing.route === delivery.route &&
-              existing.date === delivery.date,
-          );
+				for (const delivery of processed.deliveries) {
+					const isDuplicate = current.deliveries.some(
+						(existing) =>
+							existing.courier.toLowerCase() ===
+								delivery.courier.toLowerCase() &&
+							existing.route === delivery.route &&
+							existing.date === delivery.date,
+					);
 
-          if (isDuplicate) {
-            duplicateCount++;
-            continue;
-          }
+					if (isDuplicate) {
+						duplicateCount++;
+					} else {
+						newDeliveries.push(delivery);
+					}
+				}
 
-          const rawMsg = processed.rawMessages[delivery.date] || `Importado desde ${file.name}`;
-          await repository.addDelivery(delivery, rawMsg);
-          addedCount++;
-          lastDeliveryMonth = delivery.date.slice(0, 7);
-        }
+				view.showImportPreview({
+					file,
+					format: processed.format,
+					targetCourier,
+					deliveries: newDeliveries,
+					rawMessages: processed.rawMessages,
+					duplicates: duplicateCount,
+					otherCouriersOmitted: processed.otherCouriersOmitted,
+				});
+			} catch (err) {
+				const error = err as Error;
+				view.showImportError(
+					file.name,
+					error.message || "Error al importar el archivo.",
+				);
+			}
+		},
 
-        const dupNotice = duplicateCount > 0 ? ` (${duplicateCount} duplicadas omitidas)` : "";
-        const courierNotice =
-          (processed.otherCouriersOmitted ?? 0) > 0
-            ? ` (${processed.otherCouriersOmitted} de otros repartidores omitidos)`
-            : "";
+		onConfirmImport: async (deliveries, rawMessages, file) => {
+			try {
+				let addedCount = 0;
+				let lastDeliveryMonth = currentMonth;
 
-        if (lastDeliveryMonth !== currentMonth) {
-          currentMonth = lastDeliveryMonth;
-        }
+				for (const delivery of deliveries) {
+					const rawMsg =
+						rawMessages[delivery.date] ||
+						`Importado desde ${file.name}`;
+					await repository.addDelivery(delivery, rawMsg);
+					addedCount++;
+					lastDeliveryMonth = delivery.date.slice(0, 7);
+				}
 
-        await render();
-        view.showSuccess(`Se importaron ${addedCount} entregas desde ${file.name}.${dupNotice}${courierNotice}`);
-      } catch {
-        view.showError("Error al importar el archivo.");
-      }
-    },
+				if (lastDeliveryMonth !== currentMonth) {
+					currentMonth = lastDeliveryMonth;
+				}
+
+				view.closeImportModal();
+				await render();
+				view.showSuccess(
+					`Se importaron ${addedCount} entregas correctamente.`,
+				);
+			} catch {
+				view.showError("Error al guardar las entregas importadas.");
+			}
+		},
 
     onClear: async () => {
       await repository.clearAllData();

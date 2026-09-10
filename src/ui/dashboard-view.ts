@@ -1,5 +1,15 @@
 import type { MonthlySummary } from "../domain/calculations";
-import type { Expense, Settings } from "../domain/models";
+import type { Delivery, Expense, Settings } from "../domain/models";
+
+export interface ImportPreviewData {
+  file: File;
+  format: "whatsapp" | "cld" | "json" | "csv" | "unknown";
+  targetCourier: string;
+  deliveries: Delivery[];
+  rawMessages: { [key: string]: string };
+  duplicates: number;
+  otherCouriersOmitted?: number;
+}
 
 export interface DashboardViewOptions {
   onMessageSubmit: (message: string) => Promise<void>;
@@ -7,6 +17,7 @@ export interface DashboardViewOptions {
   onMonthChange: (month: string) => void;
   onExport: () => Promise<void>;
   onImport: (file: File) => Promise<void>;
+  onConfirmImport?: (deliveries: Delivery[], rawMessages: { [key: string]: string }, file: File) => Promise<void>;
   onClear: () => Promise<void>;
   onLogin?: () => Promise<void>;
   onLogout?: () => Promise<void>;
@@ -18,6 +29,8 @@ export interface DashboardViewOptions {
 
 // Minimalist SVG Vector Icons (Eliminating Emojis)
 const ICONS = {
+  spinner: `<svg class="spin" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg>`,
+  alertTriangle: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>`,
   chevronDown: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>`,
   chevronLeft: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>`,
   chevronRight: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>`,
@@ -121,6 +134,306 @@ export class DashboardView {
 			modal.classList.add("hidden");
 			modal.setAttribute("aria-hidden", "true");
 		}
+	}
+
+	private importState: "hidden" | "loading" | "preview" | "error" = "hidden";
+	private currentImportData: ImportPreviewData | null = null;
+	private currentImportError: { filename: string; error: string } | null = null;
+
+	showImportLoading(file: File): void {
+		this.importState = "loading";
+		this.currentImportData = {
+			file,
+			format: "unknown",
+			targetCourier: "",
+			deliveries: [],
+			rawMessages: {},
+			duplicates: 0,
+		};
+		this.currentImportError = null;
+		this.renderImportModal();
+	}
+
+	showImportPreview(data: ImportPreviewData): void {
+		this.importState = "preview";
+		this.currentImportData = {
+			...data,
+			deliveries: data.deliveries.map((d) => ({ ...d })),
+		};
+		this.currentImportError = null;
+		this.renderImportModal();
+	}
+
+	showImportError(filename: string, error: string): void {
+		this.importState = "error";
+		this.currentImportData = null;
+		this.currentImportError = { filename, error };
+		this.renderImportModal();
+	}
+
+	closeImportModal(): void {
+		this.importState = "hidden";
+		this.currentImportData = null;
+		this.currentImportError = null;
+		const modal = this.root.querySelector("#import-modal");
+		if (modal) {
+			modal.classList.add("hidden");
+			modal.classList.remove("active");
+			modal.setAttribute("aria-hidden", "true");
+		}
+	}
+
+	private renderImportModal(): void {
+		const modal = this.root.querySelector<HTMLDivElement>("#import-modal");
+		if (!modal) return;
+
+		if (this.importState === "hidden") {
+			modal.classList.add("hidden");
+			modal.classList.remove("active");
+			modal.setAttribute("aria-hidden", "true");
+			return;
+		}
+
+		modal.classList.remove("hidden");
+		modal.classList.add("active");
+		modal.setAttribute("aria-hidden", "false");
+
+		if (this.importState === "loading") {
+			const fileName = escapeHtml(this.currentImportData?.file.name || "archivo");
+			modal.innerHTML = `
+				<div class="modal-card">
+					<div class="modal-header">
+						<div class="modal-title-wrap">
+							<div class="modal-icon">${ICONS.upload}</div>
+							<h2 id="import-title">Importando Archivo</h2>
+						</div>
+						<button class="modal-close" id="close-import-modal" aria-label="Cerrar">${ICONS.close}</button>
+					</div>
+					<div class="modal-body import-loading-view">
+						<div class="spinner-wrap">${ICONS.spinner}</div>
+						<h3 class="import-filename">${fileName}</h3>
+						<p class="import-loading-msg">Descomprimiendo y analizando reportes de entregas…</p>
+					</div>
+				</div>
+			`;
+			modal.querySelector("#close-import-modal")?.addEventListener("click", () => this.closeImportModal());
+			return;
+		}
+
+		if (this.importState === "error") {
+			const fileName = escapeHtml(this.currentImportError?.filename || "archivo");
+			const errorMsg = escapeHtml(this.currentImportError?.error || "Error al procesar el archivo.");
+			modal.innerHTML = `
+				<div class="modal-card">
+					<div class="modal-header">
+						<div class="modal-title-wrap">
+							<div class="modal-icon text-danger">${ICONS.alertTriangle}</div>
+							<h2 id="import-title">Error al Importar</h2>
+						</div>
+						<button class="modal-close" id="close-import-modal" aria-label="Cerrar">${ICONS.close}</button>
+					</div>
+					<div class="modal-body import-error-view">
+						<p class="import-error-filename"><strong>Archivo:</strong> ${fileName}</p>
+						<div class="import-error-box">${errorMsg}</div>
+						<div class="modal-actions" style="margin-top: 16px;">
+							<button class="btn-secondary" id="btn-close-import-error" type="button" style="width: 100%;">Cerrar</button>
+						</div>
+					</div>
+				</div>
+			`;
+			modal.querySelector("#close-import-modal")?.addEventListener("click", () => this.closeImportModal());
+			modal.querySelector("#btn-close-import-error")?.addEventListener("click", () => this.closeImportModal());
+			return;
+		}
+
+		if (this.importState === "preview" && this.currentImportData) {
+			this.renderImportPreviewContent(modal);
+		}
+	}
+
+	private renderImportPreviewContent(modal: HTMLElement): void {
+		if (!this.currentImportData) return;
+		const data = this.currentImportData;
+		const fileName = escapeHtml(data.file.name);
+		const courier = escapeHtml(data.targetCourier || "Usuario");
+		const formatBadge = data.format.toUpperCase();
+
+		const totalDeliveries = data.deliveries.length;
+		const totalDelivered = data.deliveries.reduce((sum, d) => sum + d.delivered, 0);
+		const totalIncidents = data.deliveries.reduce((sum, d) => sum + d.incidents, 0);
+
+		const dupNotice = data.duplicates > 0
+			? `<div class="import-notice warning">${ICONS.alertTriangle} <strong>${data.duplicates}</strong> entregas duplicadas omitidas.</div>`
+			: "";
+		const courierNotice = (data.otherCouriersOmitted ?? 0) > 0
+			? `<div class="import-notice info">${ICONS.user} <strong>${data.otherCouriersOmitted}</strong> reportes de otros repartidores excluidos.</div>`
+			: "";
+
+		const tableRows = data.deliveries.length > 0
+			? data.deliveries.map((d, i) => `
+			<tr data-row-index="${i}">
+				<td>
+					<input type="date" class="import-input-field input-date" value="${d.date}" data-idx="${i}" data-field="date" aria-label="Fecha" />
+				</td>
+				<td>
+					<input type="text" class="import-input-field input-route" value="${escapeHtml(d.route)}" data-idx="${i}" data-field="route" aria-label="Ruta" />
+				</td>
+				<td>
+					<input type="number" class="import-input-field input-num" value="${d.delivered}" min="0" data-idx="${i}" data-field="delivered" aria-label="Entregados" />
+				</td>
+				<td>
+					<input type="number" class="import-input-field input-num" value="${d.incidents}" min="0" data-idx="${i}" data-field="incidents" aria-label="Incidencias" />
+				</td>
+				<td class="align-center">
+					<button type="button" class="btn-delete-import-row" data-idx="${i}" aria-label="Eliminar fila" title="Eliminar fila">${ICONS.trash}</button>
+				</td>
+			</tr>
+		`).join("")
+			: `<tr><td colspan="5" style="text-align: center; color: var(--text-muted); padding: 20px;">No hay entregas pendientes de importar.</td></tr>`;
+
+		modal.innerHTML = `
+			<div class="modal-card modal-card-large">
+				<div class="modal-header">
+					<div class="modal-title-wrap">
+						<div class="modal-icon">${ICONS.upload}</div>
+						<div>
+							<h2 id="import-title">Vista Previa & Corrección</h2>
+							<p class="modal-subtitle">${fileName} &bull; Repartidor: <strong>${courier}</strong> &bull; <span class="badge-format">${formatBadge}</span></p>
+						</div>
+					</div>
+					<button class="modal-close" id="close-import-modal" aria-label="Cerrar">${ICONS.close}</button>
+				</div>
+				<div class="modal-body">
+					<div class="import-stats-chips">
+						<div class="import-chip">
+							<span class="chip-value" id="stat-total-rows">${totalDeliveries}</span>
+							<span class="chip-label">Entregas</span>
+						</div>
+						<div class="import-chip">
+							<span class="chip-value" id="stat-total-pkgs">${totalDelivered}</span>
+							<span class="chip-label">Paquetes</span>
+						</div>
+						<div class="import-chip">
+							<span class="chip-value" id="stat-total-inc">${totalIncidents}</span>
+							<span class="chip-label">Incidencias</span>
+						</div>
+					</div>
+
+					${dupNotice}
+					${courierNotice}
+
+					<div class="import-edit-hint">
+						<span>Revisa y corrige cualquier celda antes de guardar, o elimina filas con el botón de papelera.</span>
+					</div>
+
+					<div class="import-table-container">
+						<table class="import-table">
+							<thead>
+								<tr>
+									<th>Fecha</th>
+									<th>Ruta</th>
+									<th style="width: 90px;">Entregados</th>
+									<th style="width: 90px;">Incidencias</th>
+									<th style="width: 44px; text-align: center;"></th>
+								</tr>
+							</thead>
+							<tbody id="import-table-body">
+								${tableRows}
+							</tbody>
+						</table>
+					</div>
+
+					<div class="modal-actions-split">
+						<button class="btn-secondary" id="btn-cancel-import" type="button">Cancelar</button>
+						<button class="btn-primary" id="btn-confirm-import" type="button" ${totalDeliveries === 0 ? "disabled" : ""}>Aceptar e Importar (<span id="btn-import-count">${totalDeliveries}</span> entregas)</button>
+					</div>
+				</div>
+			</div>
+		`;
+
+		this.bindImportPreviewListeners(modal);
+	}
+
+	private bindImportPreviewListeners(modal: HTMLElement): void {
+		modal.querySelector("#close-import-modal")?.addEventListener("click", () => {
+			this.closeImportModal();
+			this.showSuccess("Importación cancelada.");
+		});
+
+		modal.querySelector("#btn-cancel-import")?.addEventListener("click", () => {
+			this.closeImportModal();
+			this.showSuccess("Importación cancelada.");
+		});
+
+		modal.querySelector("#btn-confirm-import")?.addEventListener("click", async () => {
+			if (!this.currentImportData || this.currentImportData.deliveries.length === 0) return;
+			const deliveriesToSave = this.currentImportData.deliveries;
+			const rawMessages = this.currentImportData.rawMessages;
+			const file = this.currentImportData.file;
+			await this.options?.onConfirmImport?.(deliveriesToSave, rawMessages, file);
+		});
+
+		modal.querySelectorAll<HTMLInputElement>(".import-input-field").forEach((input) => {
+			input.addEventListener("input", (e) => {
+				const target = e.target as HTMLInputElement;
+				const idx = Number.parseInt(target.dataset.idx || "-1", 10);
+				const field = target.dataset.field;
+				if (!this.currentImportData || idx < 0) return;
+				const delivery = this.currentImportData.deliveries[idx];
+				if (!delivery) return;
+
+				if (field === "date") {
+					this.currentImportData.deliveries[idx] = { ...delivery, date: target.value };
+				} else if (field === "route") {
+					this.currentImportData.deliveries[idx] = { ...delivery, route: target.value };
+				} else if (field === "delivered") {
+					const val = Number.parseInt(target.value, 10) || 0;
+					this.currentImportData.deliveries[idx] = {
+						...delivery,
+						delivered: val,
+						received: val + delivery.incidents,
+					};
+				} else if (field === "incidents") {
+					const val = Number.parseInt(target.value, 10) || 0;
+					this.currentImportData.deliveries[idx] = {
+						...delivery,
+						incidents: val,
+						received: delivery.delivered + val,
+					};
+				}
+				this.updateImportPreviewStats(modal);
+			});
+		});
+
+		modal.querySelectorAll<HTMLButtonElement>(".btn-delete-import-row").forEach((btn) => {
+			btn.addEventListener("click", (e) => {
+				const target = (e.target as HTMLElement).closest("button") as HTMLButtonElement;
+				const idx = Number.parseInt(target.dataset.idx || "-1", 10);
+				if (!this.currentImportData || idx < 0) return;
+				this.currentImportData.deliveries.splice(idx, 1);
+				this.renderImportPreviewContent(modal);
+			});
+		});
+	}
+
+	private updateImportPreviewStats(modal: HTMLElement): void {
+		if (!this.currentImportData) return;
+		const deliveries = this.currentImportData.deliveries;
+		const totalDeliveries = deliveries.length;
+		const totalDelivered = deliveries.reduce((sum, d) => sum + d.delivered, 0);
+		const totalIncidents = deliveries.reduce((sum, d) => sum + d.incidents, 0);
+
+		const statRows = modal.querySelector("#stat-total-rows");
+		const statPkgs = modal.querySelector("#stat-total-pkgs");
+		const statInc = modal.querySelector("#stat-total-inc");
+		const btnCount = modal.querySelector("#btn-import-count");
+		const confirmBtn = modal.querySelector<HTMLButtonElement>("#btn-confirm-import");
+
+		if (statRows) statRows.textContent = String(totalDeliveries);
+		if (statPkgs) statPkgs.textContent = String(totalDelivered);
+		if (statInc) statInc.textContent = String(totalIncidents);
+		if (btnCount) btnCount.textContent = String(totalDeliveries);
+		if (confirmBtn) confirmBtn.disabled = totalDeliveries === 0;
 	}
 
   render(summary: MonthlySummary, settings?: Settings, expenses?: readonly Expense[]): void {
@@ -320,7 +633,7 @@ export class DashboardView {
                 <strong>−${money.format(summary.debts)}</strong>
                 <span>Deudas</span>
               </div>
-              <div class="metric-card metric-card-interactive" id="card-expenses" role="button" tabindex="0" aria-label="Gastos fijos: −${money.format(summary.expenses)}. Clic para configurar gastos.">
+              <div class="metric-card metric-card-interactive" id="card-expenses" role="button" tabindex="0" aria-label="−${money.format(summary.expenses)} Gastos. Clic para configurar gastos.">
                 <strong>−${money.format(summary.expenses)}</strong>
                 <span>Gastos</span>
               </div>
@@ -504,10 +817,16 @@ export class DashboardView {
             </div>
           </div>
         </div>
+
+        <!-- Modal de Importación & Vista Previa Interactiva (Popup) -->
+        <div class="modal-overlay hidden" id="import-modal" role="dialog" aria-modal="true" aria-label="Importar entregas"></div>
       </main>
     `;
 
     this.bindEvents();
+    if (this.importState !== "hidden") {
+      this.renderImportModal();
+    }
   }
 
   showSuccess(message: string): void {

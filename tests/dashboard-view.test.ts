@@ -341,4 +341,279 @@ describe("DashboardView", () => {
 
 		expect(onDeleteExpense).toHaveBeenCalledWith("exp-123");
 	});
+
+	it("displays loading state with spinner and filename when showImportLoading is called", () => {
+		view.render(mockSummary);
+		const testFile = new File(["test data"], "reporte_agosto.zip", { type: "application/zip" });
+
+		view.showImportLoading(testFile);
+
+		const modal = root.querySelector<HTMLDivElement>("#import-modal")!;
+		expect(modal.classList.contains("active")).toBe(true);
+		expect(modal.classList.contains("hidden")).toBe(false);
+		expect(modal.textContent).toContain("reporte_agosto.zip");
+		expect(modal.textContent).toContain("Importando Archivo");
+		expect(modal.querySelector(".spin")).toBeTruthy();
+	});
+
+	it("displays interactive preview with editable table and metrics", () => {
+		view.render(mockSummary);
+		const testFile = new File(["test data"], "chat.txt", { type: "text/plain" });
+
+		view.showImportPreview({
+			file: testFile,
+			format: "whatsapp",
+			targetCourier: "Claudio",
+			deliveries: [
+				{
+					id: "del-1",
+					courier: "Claudio",
+					route: "08918",
+					date: "2026-08-28",
+					received: 50,
+					incidents: 2,
+					delivered: 48,
+					rawMessageId: "raw-1",
+				},
+				{
+					id: "del-2",
+					courier: "Claudio",
+					route: "08930",
+					date: "2026-08-29",
+					received: 42,
+					incidents: 1,
+					delivered: 41,
+					rawMessageId: "raw-2",
+				},
+			],
+			rawMessages: {
+				"2026-08-28": "msg 1",
+				"2026-08-29": "msg 2",
+			},
+			duplicates: 3,
+			otherCouriersOmitted: 5,
+		});
+
+		const modal = root.querySelector<HTMLDivElement>("#import-modal")!;
+		expect(modal.classList.contains("active")).toBe(true);
+		expect(modal.textContent).toContain("Vista Previa & Corrección");
+		expect(modal.textContent).toContain("WHATSAPP");
+		expect(modal.textContent).toContain("Repartidor: Claudio");
+		expect(modal.querySelector("#stat-total-rows")?.textContent).toBe("2");
+		expect(modal.querySelector("#stat-total-pkgs")?.textContent).toBe("89");
+		expect(modal.querySelector("#stat-total-inc")?.textContent).toBe("3");
+		expect(modal.textContent).toContain("3 entregas duplicadas omitidas");
+		expect(modal.textContent).toContain("5 reportes de otros repartidores excluidos");
+
+		const rows = modal.querySelectorAll("#import-table-body tr");
+		expect(rows.length).toBe(2);
+
+		const firstRowRoute = modal.querySelector<HTMLInputElement>('input[data-idx="0"][data-field="route"]')!;
+		expect(firstRowRoute.value).toBe("08918");
+	});
+
+	it("updates delivery and dynamically recalculates stats when editing input cells", () => {
+		view.render(mockSummary);
+		const testFile = new File(["test data"], "chat.txt", { type: "text/plain" });
+
+		view.showImportPreview({
+			file: testFile,
+			format: "whatsapp",
+			targetCourier: "Claudio",
+			deliveries: [
+				{
+					id: "del-1",
+					courier: "Claudio",
+					route: "08918",
+					date: "2026-08-28",
+					received: 50,
+					incidents: 2,
+					delivered: 48,
+					rawMessageId: "raw-1",
+				},
+			],
+			rawMessages: {},
+			duplicates: 0,
+		});
+
+		const modal = root.querySelector<HTMLDivElement>("#import-modal")!;
+		const deliveredInput = modal.querySelector<HTMLInputElement>('input[data-idx="0"][data-field="delivered"]')!;
+		const incidentsInput = modal.querySelector<HTMLInputElement>('input[data-idx="0"][data-field="incidents"]')!;
+
+		deliveredInput.value = "55";
+		deliveredInput.dispatchEvent(new Event("input"));
+
+		expect(modal.querySelector("#stat-total-pkgs")?.textContent).toBe("55");
+
+		incidentsInput.value = "4";
+		incidentsInput.dispatchEvent(new Event("input"));
+
+		expect(modal.querySelector("#stat-total-inc")?.textContent).toBe("4");
+	});
+
+	it("removes a row and re-renders table when clicking delete row button", () => {
+		view.render(mockSummary);
+		const testFile = new File(["test data"], "chat.txt", { type: "text/plain" });
+
+		view.showImportPreview({
+			file: testFile,
+			format: "whatsapp",
+			targetCourier: "Claudio",
+			deliveries: [
+				{
+					id: "del-1",
+					courier: "Claudio",
+					route: "08918",
+					date: "2026-08-28",
+					received: 50,
+					incidents: 2,
+					delivered: 48,
+					rawMessageId: "raw-1",
+				},
+				{
+					id: "del-2",
+					courier: "Claudio",
+					route: "08930",
+					date: "2026-08-29",
+					received: 42,
+					incidents: 1,
+					delivered: 41,
+					rawMessageId: "raw-2",
+				},
+			],
+			rawMessages: {},
+			duplicates: 0,
+		});
+
+		const modal = root.querySelector<HTMLDivElement>("#import-modal")!;
+		const deleteFirstBtn = modal.querySelector<HTMLButtonElement>('.btn-delete-import-row[data-idx="0"]')!;
+
+		deleteFirstBtn.click();
+
+		const rows = modal.querySelectorAll("#import-table-body tr");
+		expect(rows.length).toBe(1);
+		expect(modal.querySelector("#stat-total-rows")?.textContent).toBe("1");
+		expect(modal.querySelector("#stat-total-pkgs")?.textContent).toBe("41");
+
+		const remainingRoute = modal.querySelector<HTMLInputElement>('input[data-idx="0"][data-field="route"]')!;
+		expect(remainingRoute.value).toBe("08930");
+	});
+
+	it("closes modal on cancel without triggering onConfirmImport", () => {
+		const onConfirmImport = vi.fn().mockResolvedValue(undefined);
+		view.setHandlers({
+			onMessageSubmit: vi.fn(),
+			onDebtSubmit: vi.fn(),
+			onMonthChange: vi.fn(),
+			onExport: vi.fn(),
+			onImport: vi.fn(),
+			onConfirmImport,
+			onClear: vi.fn(),
+		});
+
+		view.render(mockSummary);
+		const testFile = new File(["data"], "test.cld");
+
+		view.showImportPreview({
+			file: testFile,
+			format: "cld",
+			targetCourier: "Claudio",
+			deliveries: [
+				{
+					id: "del-1",
+					courier: "Claudio",
+					route: "08918",
+					date: "2026-08-28",
+					received: 50,
+					incidents: 2,
+					delivered: 48,
+					rawMessageId: "raw-1",
+				},
+			],
+			rawMessages: {},
+			duplicates: 0,
+		});
+
+		const modal = root.querySelector<HTMLDivElement>("#import-modal")!;
+		const cancelBtn = modal.querySelector<HTMLButtonElement>("#btn-cancel-import")!;
+
+		cancelBtn.click();
+
+		expect(modal.classList.contains("hidden")).toBe(true);
+		expect(modal.classList.contains("active")).toBe(false);
+		expect(onConfirmImport).not.toHaveBeenCalled();
+	});
+
+	it("triggers onConfirmImport with edited deliveries when clicking confirm button", async () => {
+		const onConfirmImport = vi.fn().mockResolvedValue(undefined);
+		view.setHandlers({
+			onMessageSubmit: vi.fn(),
+			onDebtSubmit: vi.fn(),
+			onMonthChange: vi.fn(),
+			onExport: vi.fn(),
+			onImport: vi.fn(),
+			onConfirmImport,
+			onClear: vi.fn(),
+		});
+
+		view.render(mockSummary);
+		const testFile = new File(["data"], "test.cld");
+
+		view.showImportPreview({
+			file: testFile,
+			format: "cld",
+			targetCourier: "Claudio",
+			deliveries: [
+				{
+					id: "del-1",
+					courier: "Claudio",
+					route: "08918",
+					date: "2026-08-28",
+					received: 50,
+					incidents: 2,
+					delivered: 48,
+					rawMessageId: "raw-1",
+				},
+			],
+			rawMessages: { "2026-08-28": "raw" },
+			duplicates: 0,
+		});
+
+		const modal = root.querySelector<HTMLDivElement>("#import-modal")!;
+		const routeInput = modal.querySelector<HTMLInputElement>('input[data-idx="0"][data-field="route"]')!;
+		routeInput.value = "08999";
+		routeInput.dispatchEvent(new Event("input"));
+
+		const confirmBtn = modal.querySelector<HTMLButtonElement>("#btn-confirm-import")!;
+		confirmBtn.click();
+
+		expect(onConfirmImport).toHaveBeenCalledWith(
+			[
+				expect.objectContaining({
+					route: "08999",
+					delivered: 48,
+				}),
+			],
+			{ "2026-08-28": "raw" },
+			testFile,
+		);
+	});
+
+	it("displays error state with descriptive message and allows closing", () => {
+		view.render(mockSummary);
+
+		view.showImportError("corrupto.zip", "El archivo ZIP está dañado o no contiene texto legible.");
+
+		const modal = root.querySelector<HTMLDivElement>("#import-modal")!;
+		expect(modal.classList.contains("active")).toBe(true);
+		expect(modal.textContent).toContain("Error al Importar");
+		expect(modal.textContent).toContain("corrupto.zip");
+		expect(modal.textContent).toContain("El archivo ZIP está dañado");
+
+		const closeBtn = modal.querySelector<HTMLButtonElement>("#btn-close-import-error")!;
+		closeBtn.click();
+
+		expect(modal.classList.contains("hidden")).toBe(true);
+		expect(modal.classList.contains("active")).toBe(false);
+	});
 });
