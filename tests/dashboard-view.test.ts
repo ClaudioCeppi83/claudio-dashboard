@@ -176,7 +176,19 @@ describe("DashboardView", () => {
 		expect(getAdjacentMonth("2025-12", 1)).toBe("2026-01");
 	});
 
+	it("renders only Google login button in menu when unauthenticated guest", () => {
+		view.setUser(null);
+		view.render(mockSummary);
+
+		expect(root.querySelector("#auth-login")).not.toBeNull();
+		expect(root.querySelector("#open-settings")).toBeNull();
+		expect(root.querySelector("#export-backup")).toBeNull();
+		expect(root.querySelector("#import-trigger")).toBeNull();
+		expect(root.querySelector("#clear-data")).toBeNull();
+	});
+
 	it("opens and closes settings modal from menu button and expenses card", () => {
+		view.setUser({ displayName: "Claudio", email: "claudio@example.com" });
 		view.render(mockSummary);
 
 		const modal = root.querySelector<HTMLDivElement>("#settings-modal")!;

@@ -248,24 +248,24 @@ export class DashboardView {
                   </button>
                   <button id="migrate-data" class="menu-item" role="menuitem">
                     ${ICONS.upload} Subir datos locales a nube
+                  </button>
+                  <button id="open-settings" class="menu-item" role="menuitem">
+                    ${ICONS.settings} Configuración
+                  </button>
+                  <button id="export-backup" class="menu-item" role="menuitem">
+                    ${ICONS.download} Exportar copia (.cld)
+                  </button>
+                  <button id="import-trigger" class="menu-item" role="menuitem">
+                    ${ICONS.upload} Importar copia (.cld)
+                  </button>
+                  <input type="file" id="import-file" accept=".cld,.json,.txt" style="display:none" aria-hidden="true" />
+                  <button id="clear-data" class="menu-item danger" role="menuitem">
+                    ${ICONS.trash} Restablecer datos
                   </button>`
                 : `<button id="auth-login" class="menu-item btn-auth-google" role="menuitem">
                     ${ICONS.google} Conectar Google Cloud
                   </button>`
             }
-            <button id="open-settings" class="menu-item" role="menuitem">
-              ${ICONS.settings} Configuración
-            </button>
-            <button id="export-backup" class="menu-item" role="menuitem">
-              ${ICONS.download} Exportar copia (.cld)
-            </button>
-            <button id="import-trigger" class="menu-item" role="menuitem">
-              ${ICONS.upload} Importar copia (.cld)
-            </button>
-            <input type="file" id="import-file" accept=".cld,.json,.txt" style="display:none" aria-hidden="true" />
-            <button id="clear-data" class="menu-item danger" role="menuitem">
-              ${ICONS.trash} Restablecer datos
-            </button>
           </div>
         </header>
 
