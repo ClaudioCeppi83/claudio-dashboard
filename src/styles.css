@@ -213,20 +213,37 @@ button {
   border-bottom: 1px solid var(--border-color);
   margin-bottom: 4px;
   display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.menu-user-info {
+  display: flex;
   flex-direction: column;
   gap: 2px;
+  min-width: 0;
 }
 
-.menu-user-name {
-  font-size: 13px;
-  font-weight: 600;
-  color: var(--text-main);
+.menu-badge {
+  align-self: center;
+  font-size: 10px;
+  font-weight: 700;
+  padding: 2px 8px;
+  border-radius: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  white-space: nowrap;
 }
 
-.menu-user-email {
-  font-size: 11px;
-  color: var(--text-muted);
-  word-break: break-all;
+.menu-badge.online {
+  background: rgba(16, 185, 129, 0.15);
+  color: #10b981;
+}
+
+.menu-badge.local {
+  background: rgba(245, 158, 11, 0.15);
+  color: #f59e0b;
 }
 
 .btn-auth-google {
@@ -484,6 +501,58 @@ button {
 
 .menu-item.danger:hover {
   background: var(--danger-bg);
+}
+
+.menu-group {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.menu-group-title {
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-muted);
+  padding: 6px 12px 2px;
+}
+
+.menu-divider {
+  height: 1px;
+  background: var(--border-color);
+  margin: 4px 6px;
+}
+
+.menu-item-main {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.menu-item-tag {
+  margin-left: auto;
+  font-size: 9px;
+  font-weight: 700;
+  padding: 2px 6px;
+  border-radius: 4px;
+  background: var(--accent-light);
+  color: var(--accent-color);
+  letter-spacing: 0.04em;
+  white-space: nowrap;
+}
+
+.action-buttons-row {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  margin-top: 4px;
+}
+
+textarea.drag-over {
+  border-color: var(--accent-color) !important;
+  background: var(--accent-light) !important;
+  box-shadow: 0 0 0 3px rgba(0, 0, 0, 0.05);
 }
 
 /* Grid Layout Dual (Mobile-Single, Desktop-Two Columns) */

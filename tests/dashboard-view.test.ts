@@ -176,15 +176,64 @@ describe("DashboardView", () => {
 		expect(getAdjacentMonth("2025-12", 1)).toBe("2026-01");
 	});
 
-	it("renders only Google login button in menu when unauthenticated guest", () => {
+	it("renders structured menu with login button in local mode when unauthenticated", () => {
 		view.setUser(null);
 		view.render(mockSummary);
 
-		expect(root.querySelector("#auth-login")).not.toBeNull();
-		expect(root.querySelector("#open-settings")).toBeNull();
-		expect(root.querySelector("#export-backup")).toBeNull();
-		expect(root.querySelector("#import-trigger")).toBeNull();
-		expect(root.querySelector("#clear-data")).toBeNull();
+		const loginBtn = root.querySelector("#auth-login");
+		expect(loginBtn).not.toBeNull();
+		expect(loginBtn?.textContent).toContain("Iniciar sesión");
+		expect(root.querySelector("#auth-logout")).toBeNull();
+		expect(root.querySelector("#migrate-data")).toBeNull();
+
+		// Local mode tools are available
+		expect(root.querySelector("#open-settings")).not.toBeNull();
+		expect(root.querySelector("#export-backup")).not.toBeNull();
+		expect(root.querySelector("#import-trigger")).not.toBeNull();
+		expect(root.querySelector("#clear-data")).not.toBeNull();
+		expect(root.querySelector(".menu-badge.local")?.textContent).toContain("Local");
+	});
+
+	it("requires typing current date in DD/MM/YYYY to confirm clear-data", async () => {
+		const onClear = vi.fn().mockResolvedValue(undefined);
+		view.setHandlers({
+			onMessageSubmit: vi.fn(),
+			onDebtSubmit: vi.fn(),
+			onMonthChange: vi.fn(),
+			onExport: vi.fn(),
+			onImport: vi.fn(),
+			onClear,
+		});
+		view.render(mockSummary);
+
+		const now = new Date();
+		const day = String(now.getDate()).padStart(2, "0");
+		const month = String(now.getMonth() + 1).padStart(2, "0");
+		const year = now.getFullYear();
+		const todayFormatted = `${day}/${month}/${year}`;
+
+		const clearBtn = root.querySelector<HTMLButtonElement>("#clear-data")!;
+
+		// 1. Wrong date -> should NOT call onClear
+		vi.spyOn(window, "prompt").mockReturnValueOnce("01/01/2000");
+		clearBtn.click();
+		expect(onClear).not.toHaveBeenCalled();
+
+		// 2. Correct date -> should call onClear
+		vi.spyOn(window, "prompt").mockReturnValueOnce(todayFormatted);
+		clearBtn.click();
+		expect(onClear).toHaveBeenCalledTimes(1);
+	});
+
+	it("triggers file input click when quick upload button is clicked", () => {
+		view.render(mockSummary);
+		const fileInput = root.querySelector<HTMLInputElement>("#import-file")!;
+		const clickSpy = vi.spyOn(fileInput, "click");
+
+		const quickUploadBtn = root.querySelector<HTMLButtonElement>("#quick-upload-trigger")!;
+		quickUploadBtn.click();
+
+		expect(clickSpy).toHaveBeenCalled();
 	});
 
 	it("opens and closes settings modal from menu button and expenses card", () => {

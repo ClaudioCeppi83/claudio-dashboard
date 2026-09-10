@@ -236,35 +236,66 @@ export class DashboardView {
             </button>
           </div>
           <div id="dropdown-menu" class="dropdown-menu hidden" role="menu">
-            ${
-              this.currentUser
-                ? `<div class="menu-user-card">
-                    <span class="menu-user-name">${escapeHtml(this.currentUser.displayName || "Usuario en la nube")}</span>
-                    <span class="menu-user-email">${escapeHtml(this.currentUser.email || "")}</span>
-                  </div>
-                  <button id="auth-logout" class="menu-item" role="menuitem">
-                    ${ICONS.user} Cerrar sesión
-                  </button>
-                  <button id="migrate-data" class="menu-item" role="menuitem">
-                    ${ICONS.upload} Subir datos locales a nube
-                  </button>
-                  <button id="open-settings" class="menu-item" role="menuitem">
-                    ${ICONS.settings} Configuración
-                  </button>
-                  <button id="export-backup" class="menu-item" role="menuitem">
-                    ${ICONS.download} Exportar copia (.cld)
-                  </button>
-                  <button id="import-trigger" class="menu-item" role="menuitem">
-                    ${ICONS.upload} Importar copia (.cld)
-                  </button>
-                  <input type="file" id="import-file" accept=".cld,.json,.txt" style="display:none" aria-hidden="true" />
-                  <button id="clear-data" class="menu-item danger" role="menuitem">
-                    ${ICONS.trash} Restablecer datos
-                  </button>`
-                : `<button id="auth-login" class="menu-item btn-auth-google" role="menuitem">
-                    ${ICONS.google} Conectar Google Cloud
-                  </button>`
-            }
+            <div class="menu-user-card">
+              ${
+                this.currentUser
+                  ? `<div class="menu-user-info">
+                       <span class="menu-user-name">${escapeHtml(this.currentUser.displayName || "Usuario en la nube")}</span>
+                       <span class="menu-user-email">${escapeHtml(this.currentUser.email || "")}</span>
+                     </div>
+                     <span class="menu-badge online">Nube</span>`
+                  : `<div class="menu-user-info">
+                       <span class="menu-user-name">Modo Local</span>
+                       <span class="menu-user-email">Sin sincronización en la nube</span>
+                     </div>
+                     <span class="menu-badge local">Local</span>`
+              }
+            </div>
+
+            <div class="menu-group" role="group" aria-label="Cuenta">
+              <div class="menu-group-title">Cuenta</div>
+              <button id="open-settings" class="menu-item" role="menuitem">
+                ${ICONS.settings} Configuración
+              </button>
+              ${
+                this.currentUser
+                  ? `<button id="auth-logout" class="menu-item" role="menuitem">
+                       ${ICONS.user} Cerrar sesión
+                     </button>`
+                  : `<button id="auth-login" class="menu-item btn-auth-google" role="menuitem">
+                       ${ICONS.google} Iniciar sesión
+                     </button>`
+              }
+            </div>
+
+            <div class="menu-divider"></div>
+
+            <div class="menu-group" role="group" aria-label="Datos y Archivos">
+              <div class="menu-group-title">Datos y Archivos</div>
+              ${
+                this.currentUser
+                  ? `<button id="migrate-data" class="menu-item" role="menuitem">
+                       ${ICONS.upload} Subir datos locales a nube
+                     </button>`
+                  : ""
+              }
+              <button id="import-trigger" class="menu-item" role="menuitem">
+                <span class="menu-item-main">${ICONS.upload} Importar archivo</span>
+                <span class="menu-item-tag">ZIP, TXT, CLD, CSV</span>
+              </button>
+              <input type="file" id="import-file" accept=".zip,.txt,.cld,.json,.csv" style="display:none" aria-hidden="true" />
+              <button id="export-backup" class="menu-item" role="menuitem">
+                ${ICONS.download} Exportar copia (.cld)
+              </button>
+            </div>
+
+            <div class="menu-divider"></div>
+
+            <div class="menu-group" role="group" aria-label="Zona de Peligro">
+              <button id="clear-data" class="menu-item danger" role="menuitem">
+                ${ICONS.trash} Restablecer datos
+              </button>
+            </div>
           </div>
         </header>
 
@@ -340,9 +371,14 @@ export class DashboardView {
                 <label for="message" class="form-label">Pegar reporte</label>
                 <textarea id="message" rows="4" placeholder="Pega aquí el reporte (*Nombre*, 08918, Recibidos: 50, Incidencias: 2, Entregados: 48)…"></textarea>
               </div>
-              <button class="btn-primary" id="save-message">
-                Guardar <span class="kbd-badge">⌘↵</span>
-              </button>
+              <div class="action-buttons-row">
+                <button class="btn-primary" id="save-message">
+                  Guardar <span class="kbd-badge">⌘↵</span>
+                </button>
+                <button class="btn-secondary" id="quick-upload-trigger" type="button" title="Cargar archivo ZIP, TXT, CLD o CSV">
+                  ${ICONS.upload} Cargar archivo
+                </button>
+              </div>
             </section>
 
             <section class="section-panel">
@@ -379,7 +415,12 @@ export class DashboardView {
             <div class="form-group" style="margin-bottom: 16px;">
               <textarea id="sheet-message-input" rows="5" placeholder="Pega aquí el reporte de WhatsApp…"></textarea>
             </div>
-            <button class="btn-primary" id="sheet-save-message" style="width: 100%;">Revisar y guardar</button>
+            <div class="action-buttons-row" style="margin-top: 8px;">
+              <button class="btn-primary" id="sheet-save-message" style="flex: 1;">Revisar y guardar</button>
+              <button class="btn-secondary" id="sheet-quick-upload" type="button" title="Cargar archivo ZIP, TXT, CLD o CSV" style="flex: 1;">
+                ${ICONS.upload} Cargar archivo
+              </button>
+            </div>
           </div>
         </div>
 
@@ -651,10 +692,14 @@ export class DashboardView {
       await this.options?.onExport();
     });
 
-    // Import Backup
-    this.root.querySelector("#import-trigger")?.addEventListener("click", () => {
+    // Import Handlers
+    const triggerFileInput = () => {
       this.root.querySelector<HTMLInputElement>("#import-file")?.click();
-    });
+    };
+
+    this.root.querySelector("#import-trigger")?.addEventListener("click", triggerFileInput);
+    this.root.querySelector("#quick-upload-trigger")?.addEventListener("click", triggerFileInput);
+    this.root.querySelector("#sheet-quick-upload")?.addEventListener("click", triggerFileInput);
 
     this.root.querySelector("#import-file")?.addEventListener("change", async (e) => {
       const input = e.target as HTMLInputElement;
@@ -662,7 +707,30 @@ export class DashboardView {
       if (file) {
         await this.options?.onImport(file);
       }
+      input.value = "";
     });
+
+    // Drag and drop onto WhatsApp textareas
+    const bindDropTarget = (el: HTMLElement | null) => {
+      if (!el) return;
+      el.addEventListener("dragover", (e) => {
+        e.preventDefault();
+        el.classList.add("drag-over");
+      });
+      el.addEventListener("dragleave", () => {
+        el.classList.remove("drag-over");
+      });
+      el.addEventListener("drop", async (e) => {
+        e.preventDefault();
+        el.classList.remove("drag-over");
+        const file = e.dataTransfer?.files?.[0];
+        if (file) {
+          await this.options?.onImport(file);
+        }
+      });
+    };
+    bindDropTarget(this.root.querySelector("#message"));
+    bindDropTarget(this.root.querySelector("#sheet-message-input"));
 
     // Auth Handlers
     this.root.querySelector("#auth-login")?.addEventListener("click", async () => {
@@ -677,11 +745,24 @@ export class DashboardView {
       await this.options?.onMigrateLocalData?.();
     });
 
-    // Clear Data
+    // Clear Data with Enhanced Security Prompt (Requires typing current date in DD/MM/YYYY)
     this.root.querySelector("#clear-data")?.addEventListener("click", async () => {
-      if (confirm("¿Estás seguro de que quieres borrar todos los datos locales?")) {
-        await this.options?.onClear();
+      const now = new Date();
+      const day = String(now.getDate()).padStart(2, "0");
+      const month = String(now.getMonth() + 1).padStart(2, "0");
+      const year = now.getFullYear();
+      const expectedDate = `${day}/${month}/${year}`;
+
+      const input = window.prompt(
+        `⚠️ ATENCIÓN: Esta acción borrará de forma permanente todas las entregas y registros guardados.\n\nPara confirmar, escribe la fecha de hoy (${expectedDate}) en formato DD/MM/YYYY:`,
+      );
+
+      if (!input || input.trim() !== expectedDate) {
+        this.showError("Fecha incorrecta o acción cancelada. No se modificaron los datos.");
+        return;
       }
+
+      await this.options?.onClear();
     });
 
     // Settings Modal Triggers

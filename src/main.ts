@@ -1,5 +1,6 @@
 import "./styles.css";
 import { calculateMonth } from "./domain/calculations";
+import { processUploadedFile } from "./domain/importer";
 import { parseWhatsAppMessage } from "./domain/parser";
 import { BrowserStore } from "./infrastructure/browser-store";
 import { loginWithGoogle, logoutFirebase, subscribeToAuth } from "./infrastructure/firebase-config";
@@ -170,54 +171,53 @@ async function bootstrap(): Promise<void> {
 
     onImport: async (file) => {
       try {
-        const text = await file.text();
-        if (file.name.endsWith(".txt") || (!text.trim().startsWith("{") && /entreg/i.test(text))) {
-          const current = await repository.load();
-          const targetCourier = getTargetCourier(current.settings.courierName, activeUser?.displayName);
-          const parsed = parseWhatsAppMessage(text, targetCourier);
-          if (!parsed.success) {
-            view.showError(parsed.error);
-            return;
-          }
-          let addedCount = 0;
-          let duplicateCount = 0;
-          let lastDeliveryMonth = currentMonth;
+        const current = await repository.load();
+        const targetCourier = getTargetCourier(current.settings.courierName, activeUser?.displayName);
+        const processed = await processUploadedFile(file, {
+          targetCourier,
+          currentMonth,
+        });
 
-          for (const item of parsed.values) {
-            const isDuplicate = current.deliveries.some(
-              (existing) =>
-                existing.courier.toLowerCase() === item.delivery.courier.toLowerCase() &&
-                existing.route === item.delivery.route &&
-                existing.date === item.delivery.date,
-            );
-
-            if (isDuplicate) {
-              duplicateCount++;
-              continue;
-            }
-
-            await repository.addDelivery(item.delivery, item.rawMessage);
-            addedCount++;
-            lastDeliveryMonth = item.delivery.date.slice(0, 7);
-          }
-
-          const dupNotice = duplicateCount > 0 ? ` (${duplicateCount} duplicadas omitidas)` : "";
-          const courierNotice = parsed.otherCouriersOmitted > 0
-            ? ` (${parsed.otherCouriersOmitted} de otros repartidores omitidos)`
-            : "";
-
-          if (lastDeliveryMonth !== currentMonth) {
-            currentMonth = lastDeliveryMonth;
-          }
-
-          await render();
-          view.showSuccess(`Se importaron ${addedCount} entregas desde ${file.name}.${dupNotice}${courierNotice}`);
+        if (!processed.success) {
+          view.showError(processed.error || "Error al procesar el archivo.");
           return;
         }
 
-        const count = await repository.getDriver().importNDJSON("deliveries", text);
+        let addedCount = 0;
+        let duplicateCount = 0;
+        let lastDeliveryMonth = currentMonth;
+
+        for (const delivery of processed.deliveries) {
+          const isDuplicate = current.deliveries.some(
+            (existing) =>
+              existing.courier.toLowerCase() === delivery.courier.toLowerCase() &&
+              existing.route === delivery.route &&
+              existing.date === delivery.date,
+          );
+
+          if (isDuplicate) {
+            duplicateCount++;
+            continue;
+          }
+
+          const rawMsg = processed.rawMessages[delivery.date] || `Importado desde ${file.name}`;
+          await repository.addDelivery(delivery, rawMsg);
+          addedCount++;
+          lastDeliveryMonth = delivery.date.slice(0, 7);
+        }
+
+        const dupNotice = duplicateCount > 0 ? ` (${duplicateCount} duplicadas omitidas)` : "";
+        const courierNotice =
+          (processed.otherCouriersOmitted ?? 0) > 0
+            ? ` (${processed.otherCouriersOmitted} de otros repartidores omitidos)`
+            : "";
+
+        if (lastDeliveryMonth !== currentMonth) {
+          currentMonth = lastDeliveryMonth;
+        }
+
         await render();
-        view.showSuccess(`Se importaron ${count} registros desde ${file.name}.`);
+        view.showSuccess(`Se importaron ${addedCount} entregas desde ${file.name}.${dupNotice}${courierNotice}`);
       } catch {
         view.showError("Error al importar el archivo.");
       }
