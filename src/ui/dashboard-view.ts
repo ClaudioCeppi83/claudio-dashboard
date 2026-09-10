@@ -114,7 +114,7 @@ export class DashboardView {
                 <span>${greetingText}</span>
                 ${syncBadgeHtml}
               </div>
-              <div class="month-capsule" role="button" aria-haspopup="dialog" aria-label="Cambiar mes">
+              <div class="month-capsule" role="button" aria-haspopup="dialog" aria-label="${summary.monthName} — Cambiar mes">
                 <h1 id="month-title">${summary.monthName}</h1>
                 ${ICONS.chevronDown}
                 <input type="month" id="month-picker" value="${summary.month}" aria-label="Seleccionar mes" />
@@ -191,7 +191,7 @@ export class DashboardView {
                 ${ICONS.rhythm}
               </div>
               <div class="rhythm-info">
-                <h3>Ritmo activo</h3>
+                <h2>Ritmo activo</h2>
                 <p>${summary.averagePerActiveDay.toFixed(1)} entregas/día (${summary.daysWithDeliveries} días activos)</p>
               </div>
             </section>
@@ -199,9 +199,9 @@ export class DashboardView {
             <!-- Desglose Diario en 3 Columnas: Fecha, Entregados, Generado -->
             <section class="daily-card" aria-label="Desglose diario">
               <div class="daily-header">
-                <h3>${ICONS.calendar} Desglose diario</h3>
+                <h2>${ICONS.calendar} Desglose diario</h2>
                 <div class="daily-header-actions">
-                  <button id="toggle-daily-sort" class="sort-btn" aria-label="Ordenar por fecha (${this.dailySortOrder === "desc" ? "Más recientes primero" : "Más antiguos primero"})">
+                  <button id="toggle-daily-sort" class="sort-btn" aria-label="${this.dailySortOrder === "desc" ? "Recientes — Ordenar por fecha" : "Antiguos — Ordenar por fecha"}">
                     ${this.dailySortOrder === "desc" ? ICONS.sortDesc : ICONS.sortAsc}
                     <span>${this.dailySortOrder === "desc" ? "Recientes" : "Antiguos"}</span>
                   </button>
@@ -260,7 +260,7 @@ export class DashboardView {
         </nav>
 
         <!-- Bottom Sheet: WhatsApp Message (Mobile) -->
-        <div class="sheet-overlay" id="sheet-message" aria-hidden="true" role="dialog" aria-modal="true" aria-labelledby="sheet-msg-title">
+        <div class="sheet-overlay" id="sheet-message" aria-hidden="true" inert role="dialog" aria-modal="true" aria-labelledby="sheet-msg-title">
           <div class="sheet-content">
             <div class="sheet-handle"></div>
             <div class="sheet-header">
@@ -275,7 +275,7 @@ export class DashboardView {
         </div>
 
         <!-- Bottom Sheet: Debt Entry (Mobile) -->
-        <div class="sheet-overlay" id="sheet-debt" aria-hidden="true" role="dialog" aria-modal="true" aria-labelledby="sheet-debt-title">
+        <div class="sheet-overlay" id="sheet-debt" aria-hidden="true" inert role="dialog" aria-modal="true" aria-labelledby="sheet-debt-title">
           <div class="sheet-content">
             <div class="sheet-handle"></div>
             <div class="sheet-header">
@@ -549,6 +549,7 @@ export class DashboardView {
   private openSheet(selector: string): void {
     const sheet = this.root.querySelector<HTMLElement>(selector);
     if (sheet) {
+      sheet.removeAttribute("inert");
       sheet.classList.add("active");
       sheet.setAttribute("aria-hidden", "false");
       const textarea = sheet.querySelector<HTMLTextAreaElement | HTMLInputElement>("textarea, input");
@@ -559,6 +560,7 @@ export class DashboardView {
   private closeSheet(selector: string): void {
     const sheet = this.root.querySelector<HTMLElement>(selector);
     if (sheet) {
+      sheet.setAttribute("inert", "");
       sheet.classList.remove("active");
       sheet.setAttribute("aria-hidden", "true");
     }
