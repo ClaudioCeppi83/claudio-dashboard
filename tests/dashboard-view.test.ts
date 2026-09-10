@@ -122,11 +122,11 @@ describe("DashboardView", () => {
     expect(rows[1]?.textContent).toContain("29 ago");
   });
 
-  it("renders guest greeting and local sync badge by default when unauthenticated", () => {
-    view.render(mockSummary);
-    expect(root.querySelector(".user-greeting")?.textContent).toContain("Hola, Invitado");
-    expect(root.querySelector(".sync-badge.local")?.textContent).toContain("Modo Local");
-  });
+	it("renders guest greeting and local sync badge by default when unauthenticated", () => {
+		view.render(mockSummary);
+		expect(root.querySelector(".user-greeting")?.textContent).toContain("Hola, Usuario");
+		expect(root.querySelector(".sync-badge.local")?.textContent).toContain("Modo Local");
+	});
 
   it("renders personalized user greeting and cloud online sync badge when authenticated", () => {
     view.setUser({ displayName: "Claudio Rossi", email: "claudio@example.com" });

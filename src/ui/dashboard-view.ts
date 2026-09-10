@@ -137,12 +137,11 @@ export class DashboardView {
       currency: "EUR",
     });
 
-    const rawFirstName = this.currentUser?.displayName
-      ? this.currentUser.displayName.trim().split(" ")[0]
-      : null;
-    const greetingText = rawFirstName
-      ? `Hola, ${escapeHtml(rawFirstName)}`
-      : "Hola, Invitado";
+		const rawFirstName = this.currentSettings.courierName?.trim()
+			|| (this.currentUser?.displayName ? this.currentUser.displayName.trim().split(/\s+/)[0] : null);
+		const greetingText = rawFirstName
+			? `Hola, ${escapeHtml(rawFirstName)}`
+			: "Hola, Usuario";
 
     let syncBadgeHtml = `<span class="sync-badge local"><span class="sync-dot"></span>Modo Local</span>`;
     if (this.currentUser) {
@@ -422,7 +421,7 @@ export class DashboardView {
                 <div class="settings-grid">
                   <div class="form-group">
                     <label for="setting-courier-name" class="form-label">Nombre / Alias del Repartidor</label>
-                    <input type="text" id="setting-courier-name" placeholder="Ej. Claudio" value="${escapeHtml(this.currentSettings.courierName || "")}" />
+                    <input type="text" id="setting-courier-name" placeholder="usuario" value="${escapeHtml(this.currentSettings.courierName || "")}" />
                     <span class="form-hint">Usado para atribuirte tus entregas en reportes y exportaciones de WhatsApp.</span>
                   </div>
                   <div class="form-group">

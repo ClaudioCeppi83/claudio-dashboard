@@ -64,12 +64,19 @@ async function migrateLocalDataToCloud(userId: string): Promise<number> {
   return totalMigrated;
 }
 
+function getTargetCourier(settingsCourier?: string, displayName?: string | null): string {
+	const configured = settingsCourier?.trim();
+	if (configured) return configured;
+	const sessionName = displayName?.trim().split(/\s+/)[0];
+	if (sessionName) return sessionName;
+	return "usuario";
+}
+
 async function bootstrap(): Promise<void> {
   view.setHandlers({
     onMessageSubmit: async (message) => {
       const current = await repository.load();
-      const configuredCourier = current.settings.courierName?.trim();
-      const targetCourier = configuredCourier || activeUser?.displayName?.trim().split(" ")[0] || "Claudio";
+      const targetCourier = getTargetCourier(current.settings.courierName, activeUser?.displayName);
       const parsed = parseWhatsAppMessage(message, targetCourier);
       if (!parsed.success) {
         view.showError(parsed.error);
@@ -164,10 +171,9 @@ async function bootstrap(): Promise<void> {
     onImport: async (file) => {
       try {
         const text = await file.text();
-        if (file.name.endsWith(".txt") || (!text.trim().startsWith("{") && text.includes("Entregados"))) {
+        if (file.name.endsWith(".txt") || (!text.trim().startsWith("{") && /entreg/i.test(text))) {
           const current = await repository.load();
-          const configuredCourier = current.settings.courierName?.trim();
-          const targetCourier = configuredCourier || activeUser?.displayName?.trim().split(" ")[0] || "Claudio";
+          const targetCourier = getTargetCourier(current.settings.courierName, activeUser?.displayName);
           const parsed = parseWhatsAppMessage(text, targetCourier);
           if (!parsed.success) {
             view.showError(parsed.error);
