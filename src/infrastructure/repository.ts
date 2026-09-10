@@ -30,17 +30,10 @@ export class Repository {
       this.store.readAll<Settings>(KEYS.settings),
     ]);
 
-    const defaultExpenses: Expense[] = [
-      { id: "expense-transport", amount: 22, date: new Date().toISOString().slice(0, 10), description: "Transporte", recurring: true },
-      { id: "expense-mobile", amount: 7, date: new Date().toISOString().slice(0, 10), description: "Móvil", recurring: true },
-      { id: "expense-room", amount: 250, date: new Date().toISOString().slice(0, 10), description: "Habitación", recurring: true },
-      { id: "expense-google", amount: 6, date: new Date().toISOString().slice(0, 10), description: "Google Pro", recurring: true },
-    ];
-
     return {
       deliveries,
       debts,
-      expenses: expenses.length > 0 ? expenses : defaultExpenses,
+      expenses,
       rawMessages,
       settings: settings[0] ?? { pricePerDelivery: 0.7, currency: "EUR" },
     };
@@ -62,6 +55,30 @@ export class Repository {
       date: date ?? new Date().toISOString().slice(0, 10),
       ...(description ? { description } : {}),
     } satisfies Debt);
+  }
+
+	async addExpense(amount: number, description: string, recurring = true, date?: string): Promise<Expense> {
+		const expense: Expense = {
+			id: crypto.randomUUID(),
+			amount,
+			description,
+			recurring,
+			date: date ?? new Date().toISOString().slice(0, 10),
+		};
+		await this.store.append(KEYS.expenses, expense);
+		return expense;
+	}
+
+  async deleteExpense(id: string): Promise<void> {
+    await this.store.deleteItem(KEYS.expenses, id);
+  }
+
+  async saveSettings(settings: Settings): Promise<void> {
+    const settingWithId: Settings = {
+      ...settings,
+      id: settings.id ?? "user-settings",
+    };
+    await this.store.saveAll(KEYS.settings, [settingWithId]);
   }
 
   async exportAllData(): Promise<Record<string, string>> {

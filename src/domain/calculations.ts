@@ -54,7 +54,10 @@ export function calculateMonth(data: DashboardData, month: string): MonthlySumma
     (item) => typeof item?.date === "string" && item.date.startsWith(month) && Number.isFinite(item.amount),
   );
   const expenses = (data?.expenses || []).filter(
-    (item) => typeof item?.date === "string" && item.date.startsWith(month) && Number.isFinite(item.amount),
+    (item) =>
+      Number.isFinite(item?.amount) &&
+      item.amount >= 0 &&
+      (item?.recurring === true || (typeof item?.date === "string" && item.date.startsWith(month))),
   );
 
   const delivered = deliveries.reduce((sum, item) => sum + (Number.isFinite(item.delivered) ? item.delivered : 0), 0);

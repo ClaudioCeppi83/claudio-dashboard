@@ -13,10 +13,21 @@ const view = new DashboardView(document.querySelector("#app")!);
 
 let currentMonth = new Date().toISOString().slice(0, 7);
 let activeUser: { displayName: string | null; email: string | null } | null = null;
+let userManuallySelectedMonth = false;
 
 async function render(): Promise<void> {
   const data = await repository.load();
-  view.render(calculateMonth(data, currentMonth));
+  if (!userManuallySelectedMonth && data.deliveries.length > 0) {
+    const hasCurrentDeliveries = data.deliveries.some((d) => d.date.startsWith(currentMonth));
+    if (!hasCurrentDeliveries) {
+      const activeMonths = Array.from(new Set(data.deliveries.map((d) => d.date.slice(0, 7)))).sort();
+      const latestMonth = activeMonths[activeMonths.length - 1];
+      if (latestMonth) {
+        currentMonth = latestMonth;
+      }
+    }
+  }
+  view.render(calculateMonth(data, currentMonth), data.settings, data.expenses);
 }
 
 async function migrateLocalDataToCloud(userId: string): Promise<number> {
@@ -25,6 +36,7 @@ async function migrateLocalDataToCloud(userId: string): Promise<number> {
   const localDebts = await localStore.readAll<unknown>("debts");
   const localExpenses = await localStore.readAll<unknown>("expenses");
   const localRaw = await localStore.readAll<unknown>("raw");
+  const localSettings = await localStore.readAll<unknown>("settings");
 
   let totalMigrated = 0;
 
@@ -41,6 +53,9 @@ async function migrateLocalDataToCloud(userId: string): Promise<number> {
   for (const item of localRaw) {
     await cloudStore.append("raw", item);
   }
+  for (const item of localSettings) {
+    await cloudStore.append("settings", item);
+  }
 
   if (totalMigrated > 0) {
     await localStore.clearAll();
@@ -52,14 +67,14 @@ async function migrateLocalDataToCloud(userId: string): Promise<number> {
 async function bootstrap(): Promise<void> {
   view.setHandlers({
     onMessageSubmit: async (message) => {
-      const targetCourier = activeUser?.displayName?.trim().split(" ")[0] || "Claudio";
+      const current = await repository.load();
+      const configuredCourier = current.settings.courierName?.trim();
+      const targetCourier = configuredCourier || activeUser?.displayName?.trim().split(" ")[0] || "Claudio";
       const parsed = parseWhatsAppMessage(message, targetCourier);
       if (!parsed.success) {
         view.showError(parsed.error);
         return;
       }
-
-      const current = await repository.load();
       let addedCount = 0;
       let duplicateCount = 0;
       let lastDeliveryMonth = currentMonth;
@@ -124,6 +139,7 @@ async function bootstrap(): Promise<void> {
     },
 
     onMonthChange: (month) => {
+      userManuallySelectedMonth = true;
       currentMonth = month;
       void render();
     },
@@ -149,14 +165,14 @@ async function bootstrap(): Promise<void> {
       try {
         const text = await file.text();
         if (file.name.endsWith(".txt") || (!text.trim().startsWith("{") && text.includes("Entregados"))) {
-          const targetCourier = activeUser?.displayName?.trim().split(" ")[0] || "Claudio";
+          const current = await repository.load();
+          const configuredCourier = current.settings.courierName?.trim();
+          const targetCourier = configuredCourier || activeUser?.displayName?.trim().split(" ")[0] || "Claudio";
           const parsed = parseWhatsAppMessage(text, targetCourier);
           if (!parsed.success) {
             view.showError(parsed.error);
             return;
           }
-
-          const current = await repository.load();
           let addedCount = 0;
           let duplicateCount = 0;
           let lastDeliveryMonth = currentMonth;
@@ -241,6 +257,24 @@ async function bootstrap(): Promise<void> {
       } else {
         view.showError("Inicia sesión primero para subir tus datos a Google Cloud.");
       }
+    },
+
+    onSaveSettings: async (settings) => {
+      await repository.saveSettings(settings);
+      await render();
+      view.showSuccess("Perfil y tarifas guardados correctamente.");
+    },
+
+    onAddExpense: async (amount, description) => {
+      await repository.addExpense(amount, description, true);
+      await render();
+      view.showSuccess(`Gasto fijo "${description}" añadido.`);
+    },
+
+    onDeleteExpense: async (id) => {
+      await repository.deleteExpense(id);
+      await render();
+      view.showSuccess("Gasto fijo eliminado.");
     },
   });
 

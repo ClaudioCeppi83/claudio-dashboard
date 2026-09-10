@@ -56,6 +56,13 @@ export class BrowserStore implements StorageDriver {
     return parsedItems.length;
   }
 
+  /** Deletes a single record by its id from localStorage. */
+  async deleteItem(key: string, id: string): Promise<void> {
+    const existing = await this.readAll<{ id?: string }>(key);
+    const filtered = existing.filter((item) => item?.id !== id);
+    await this.saveAll(key, filtered);
+  }
+
   /** Clears all storage keys managed by Claudio Dashboard. */
   async clearAll(): Promise<void> {
     const keysToRemove: string[] = [];

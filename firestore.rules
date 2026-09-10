@@ -61,11 +61,12 @@ service cloud.firestore {
 
     function isValidSettings() {
       let data = request.resource.data;
-      return data.keys().hasOnly(['id', 'pricePerDelivery', 'currency'])
+      return data.keys().hasOnly(['id', 'pricePerDelivery', 'currency', 'courierName'])
         && (!('id' in data) || isValidString(data.id, 1, 100))
         && (data.pricePerDelivery is number)
         && data.pricePerDelivery >= 0 && data.pricePerDelivery <= 10000
-        && isValidString(data.currency, 1, 10);
+        && isValidString(data.currency, 1, 10)
+        && (!('courierName' in data) || isValidString(data.courierName, 0, 100));
     }
 
     // Regla global de usuarios: cada usuario solo accede a su propio espacio de datos

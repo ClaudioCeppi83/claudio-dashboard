@@ -25,6 +25,8 @@ export interface Expense {
 }
 
 export interface Settings {
+  readonly id?: string;
+  readonly courierName?: string;
   readonly pricePerDelivery: number;
   readonly currency: string;
 }

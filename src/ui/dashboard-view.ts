@@ -1,4 +1,5 @@
 import type { MonthlySummary } from "../domain/calculations";
+import type { Expense, Settings } from "../domain/models";
 
 export interface DashboardViewOptions {
   onMessageSubmit: (message: string) => Promise<void>;
@@ -10,12 +11,18 @@ export interface DashboardViewOptions {
   onLogin?: () => Promise<void>;
   onLogout?: () => Promise<void>;
   onMigrateLocalData?: () => Promise<void>;
+  onSaveSettings?: (settings: Settings) => Promise<void>;
+  onAddExpense?: (amount: number, description: string) => Promise<void>;
+  onDeleteExpense?: (id: string) => Promise<void>;
 }
 
 // Minimalist SVG Vector Icons (Eliminating Emojis)
 const ICONS = {
   chevronDown: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>`,
+  chevronLeft: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>`,
+  chevronRight: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>`,
   menu: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="1.5"/><circle cx="19" cy="12" r="1.5"/><circle cx="5" cy="12" r="1.5"/></svg>`,
+  settings: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>`,
   download: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>`,
   upload: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>`,
   trash: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>`,
@@ -42,11 +49,26 @@ export function escapeHtml(str: string): string {
     .replace(/'/g, "&#039;");
 }
 
+/** Calculates adjacent month string (YYYY-MM) with an offset (+1 or -1). */
+export function getAdjacentMonth(monthStr: string, offset: number): string {
+  const parts = (monthStr || "").split("-");
+  const y = Number.parseInt(parts[0] ?? "", 10);
+  const m = Number.parseInt(parts[1] ?? "", 10);
+  if (!Number.isFinite(y) || !Number.isFinite(m)) {
+    return new Date().toISOString().slice(0, 7);
+  }
+  const d = new Date(Date.UTC(y, m - 1 + offset, 1));
+  return d.toISOString().slice(0, 7);
+}
+
 export class DashboardView {
   private readonly root: HTMLElement;
   private options?: DashboardViewOptions;
   private dailySortOrder: "desc" | "asc" = "desc";
   private lastSummary?: MonthlySummary;
+  private currentSettings: Settings = { pricePerDelivery: 0.7, currency: "EUR" };
+  private currentExpenses: readonly Expense[] = [];
+  private isSettingsOpen = false;
   private currentUser: { displayName?: string | null; email?: string | null } | null = null;
   private isOnline: boolean = typeof window !== "undefined" ? window.navigator.onLine : true;
 
@@ -54,6 +76,20 @@ export class DashboardView {
     this.root = root;
     this.restoreTheme();
     this.initNetworkListeners();
+  }
+
+  setSettings(settings: Settings): void {
+    this.currentSettings = settings;
+    if (this.lastSummary) {
+      this.render(this.lastSummary);
+    }
+  }
+
+  setExpenses(expenses: readonly Expense[]): void {
+    this.currentExpenses = expenses;
+    if (this.lastSummary) {
+      this.render(this.lastSummary);
+    }
   }
 
   setUser(user: { displayName?: string | null; email?: string | null } | null): void {
@@ -67,8 +103,34 @@ export class DashboardView {
     this.options = options;
   }
 
-  render(summary: MonthlySummary): void {
+	openSettings(): void {
+		this.isSettingsOpen = true;
+		const modal = this.root.querySelector("#settings-modal");
+		if (modal) {
+			modal.classList.remove("hidden");
+			modal.classList.add("active");
+			modal.setAttribute("aria-hidden", "false");
+		}
+	}
+
+	closeSettings(): void {
+		this.isSettingsOpen = false;
+		const modal = this.root.querySelector("#settings-modal");
+		if (modal) {
+			modal.classList.remove("active");
+			modal.classList.add("hidden");
+			modal.setAttribute("aria-hidden", "true");
+		}
+	}
+
+  render(summary: MonthlySummary, settings?: Settings, expenses?: readonly Expense[]): void {
     this.lastSummary = summary;
+    if (settings) {
+      this.currentSettings = settings;
+    }
+    if (expenses) {
+      this.currentExpenses = expenses;
+    }
 
     const money = new Intl.NumberFormat("es-ES", {
       style: "currency",
@@ -88,6 +150,28 @@ export class DashboardView {
         ? `<span class="sync-badge online" title="Sincronización directa con Google Cloud"><span class="sync-dot"></span>Nube</span>`
         : `<span class="sync-badge offline" title="Sin conexión a internet. Los cambios se guardarán en la nube al volver la red."><span class="sync-dot"></span>Sin conexión (En cola)</span>`;
     }
+
+    const totalRecurringExpenses = this.currentExpenses.reduce(
+      (sum, exp) => sum + (Number.isFinite(exp.amount) ? exp.amount : 0),
+      0,
+    );
+
+    const expensesListHtml = this.currentExpenses.length > 0
+      ? this.currentExpenses.map((exp) => `
+          <div class="expense-item-row" data-id="${escapeHtml(exp.id)}">
+            <div class="expense-item-info">
+              <span class="expense-item-desc">${escapeHtml(exp.description)}</span>
+              <span class="badge-recurring">Fijo mensual</span>
+            </div>
+            <div class="expense-item-right">
+              <span class="expense-item-amount">−${money.format(exp.amount)}</span>
+              <button class="btn-delete-expense" data-id="${escapeHtml(exp.id)}" aria-label="Eliminar ${escapeHtml(exp.description)}">
+                ${ICONS.trash}
+              </button>
+            </div>
+          </div>
+        `).join("")
+      : `<p class="expenses-empty">No hay gastos fijos registrados. Añade tus gastos habituales (habitación, móvil, etc.) a continuación.</p>`;
 
     const sortedDaily = [...summary.dailyBreakdown].sort((a, b) => {
       return this.dailySortOrder === "desc"
@@ -129,10 +213,18 @@ export class DashboardView {
                 <span>${greetingText}</span>
                 ${syncBadgeHtml}
               </div>
-              <div class="month-capsule" role="button" aria-haspopup="dialog" aria-label="${safeMonthName} — Cambiar mes">
-                <h1 id="month-title">${safeMonthName}</h1>
-                ${ICONS.chevronDown}
-                <input type="month" id="month-picker" value="${summary.month}" aria-label="Seleccionar mes" />
+              <div class="month-navigator">
+                <button class="month-nav-arrow" id="prev-month" aria-label="Mes anterior" title="Mes anterior">
+                  ${ICONS.chevronLeft}
+                </button>
+                <div class="month-capsule" role="button" aria-haspopup="dialog" aria-label="${safeMonthName} — Cambiar mes">
+                  <h1 id="month-title">${safeMonthName}</h1>
+                  ${ICONS.chevronDown}
+                  <input type="month" id="month-picker" value="${summary.month}" aria-label="Seleccionar mes" />
+                </div>
+                <button class="month-nav-arrow" id="next-month" aria-label="Mes siguiente" title="Mes siguiente">
+                  ${ICONS.chevronRight}
+                </button>
               </div>
             </div>
           </div>
@@ -161,6 +253,9 @@ export class DashboardView {
                     ${ICONS.google} Conectar Google Cloud
                   </button>`
             }
+            <button id="open-settings" class="menu-item" role="menuitem">
+              ${ICONS.settings} Configuración
+            </button>
             <button id="export-backup" class="menu-item" role="menuitem">
               ${ICONS.download} Exportar copia (.cld)
             </button>
@@ -195,7 +290,7 @@ export class DashboardView {
                 <strong>−${money.format(summary.debts)}</strong>
                 <span>Deudas</span>
               </div>
-              <div class="metric-card">
+              <div class="metric-card metric-card-interactive" id="card-expenses" role="button" tabindex="0" aria-label="Gastos fijos: −${money.format(summary.expenses)}. Clic para configurar gastos.">
                 <strong>−${money.format(summary.expenses)}</strong>
                 <span>Gastos</span>
               </div>
@@ -306,6 +401,67 @@ export class DashboardView {
               <input id="sheet-debt-desc" type="text" placeholder="Ej. Combustible, peaje…" />
             </div>
             <button class="btn-primary" id="sheet-save-debt" style="width: 100%;">Guardar deuda</button>
+          </div>
+        </div>
+
+        <!-- Modal de Configuración / Ajustes (Popup) -->
+        <div class="modal-overlay ${this.isSettingsOpen ? "" : "hidden"}" id="settings-modal" role="dialog" aria-modal="true" aria-labelledby="settings-title">
+          <div class="modal-card">
+            <div class="modal-header">
+              <div class="modal-title-wrap">
+                <div class="modal-icon">${ICONS.settings}</div>
+                <h2 id="settings-title">Configuración & Gastos</h2>
+              </div>
+              <button class="modal-close" id="close-settings" aria-label="Cerrar ventana de configuración">${ICONS.close}</button>
+            </div>
+
+            <div class="modal-body">
+              <!-- Sección 1: Perfil y Tarifa -->
+              <section class="modal-section" aria-labelledby="section-profile-title">
+                <h3 id="section-profile-title" class="section-subtitle">Perfil de Repartidor & Tarifa</h3>
+                <div class="settings-grid">
+                  <div class="form-group">
+                    <label for="setting-courier-name" class="form-label">Nombre / Alias del Repartidor</label>
+                    <input type="text" id="setting-courier-name" placeholder="Ej. Claudio" value="${escapeHtml(this.currentSettings.courierName || "")}" />
+                    <span class="form-hint">Usado para atribuirte tus entregas en reportes y exportaciones de WhatsApp.</span>
+                  </div>
+                  <div class="form-group">
+                    <label for="setting-price" class="form-label">Precio por entrega (€)</label>
+                    <input type="number" id="setting-price" step="0.01" min="0" max="1000" value="${Number.isFinite(this.currentSettings.pricePerDelivery) ? this.currentSettings.pricePerDelivery : 0.7}" />
+                    <span class="form-hint">Tarifa bruta por cada paquete entregado.</span>
+                  </div>
+                </div>
+                <button class="btn-primary btn-sm" id="btn-save-settings" style="margin-top: 10px;">
+                  Guardar Perfil y Tarifa
+                </button>
+              </section>
+
+              <hr class="modal-divider" />
+
+              <!-- Sección 2: Gastos Fijos Mensuales -->
+              <section class="modal-section" aria-labelledby="section-expenses-title">
+                <div class="expenses-header">
+                  <div>
+                    <h3 id="section-expenses-title" class="section-subtitle">Gastos Fijos Mensuales</h3>
+                    <p class="form-hint">Se deducen automáticamente cada mes de tu ingreso neto.</p>
+                  </div>
+                  <span class="badge-total-expense">Total: ${money.format(totalRecurringExpenses)}/mes</span>
+                </div>
+
+                <div class="expenses-list" id="expenses-list">
+                  ${expensesListHtml}
+                </div>
+
+                <div class="add-expense-box">
+                  <h4>Añadir nuevo gasto fijo</h4>
+                  <div class="inline-form-expense">
+                    <input type="text" id="new-expense-desc" placeholder="Concepto (ej. Habitación, Móvil, Seguro)" />
+                    <input type="number" id="new-expense-amount" step="0.01" min="0.01" placeholder="Importe (€)" />
+                    <button class="btn-secondary" id="btn-add-expense">Añadir</button>
+                  </div>
+                </div>
+              </section>
+            </div>
           </div>
         </div>
       </main>
@@ -423,6 +579,19 @@ export class DashboardView {
       }
     });
 
+    // Previous / Next Month Navigation Buttons
+    this.root.querySelector("#prev-month")?.addEventListener("click", () => {
+      if (this.lastSummary) {
+        this.options?.onMonthChange(getAdjacentMonth(this.lastSummary.month, -1));
+      }
+    });
+
+    this.root.querySelector("#next-month")?.addEventListener("click", () => {
+      if (this.lastSummary) {
+        this.options?.onMonthChange(getAdjacentMonth(this.lastSummary.month, 1));
+      }
+    });
+
     // Toggle Theme (Light / Dark)
     this.root.querySelector("#toggle-theme")?.addEventListener("click", () => {
       this.toggleTheme();
@@ -513,6 +682,89 @@ export class DashboardView {
     this.root.querySelector("#clear-data")?.addEventListener("click", async () => {
       if (confirm("¿Estás seguro de que quieres borrar todos los datos locales?")) {
         await this.options?.onClear();
+      }
+    });
+
+    // Settings Modal Triggers
+    this.root.querySelector("#open-settings")?.addEventListener("click", () => {
+      this.openSettings();
+    });
+    this.root.querySelector("#card-expenses")?.addEventListener("click", () => {
+      this.openSettings();
+    });
+    this.root.querySelector("#card-expenses")?.addEventListener("keydown", (e) => {
+      const event = e as KeyboardEvent;
+      if (event.key === "Enter" || event.key === " ") {
+        event.preventDefault();
+        this.openSettings();
+      }
+    });
+    this.root.querySelector("#close-settings")?.addEventListener("click", () => {
+      this.closeSettings();
+    });
+    const settingsModal = this.root.querySelector("#settings-modal");
+    settingsModal?.addEventListener("click", (e) => {
+      if (e.target === settingsModal) {
+        this.closeSettings();
+      }
+    });
+
+    // Save Settings
+    this.root.querySelector("#btn-save-settings")?.addEventListener("click", async () => {
+      const courierInput = this.root.querySelector<HTMLInputElement>("#setting-courier-name");
+      const priceInput = this.root.querySelector<HTMLInputElement>("#setting-price");
+      const courierName = courierInput?.value.trim() || undefined;
+      const pricePerDelivery = Number.parseFloat(priceInput?.value || "0.7");
+
+      if (Number.isNaN(pricePerDelivery) || pricePerDelivery < 0) {
+        this.showError("El precio por entrega debe ser un número positivo.");
+        return;
+      }
+
+      await this.options?.onSaveSettings?.({
+        ...this.currentSettings,
+        courierName,
+        pricePerDelivery,
+      });
+    });
+
+    // Add Expense
+    this.root.querySelector("#btn-add-expense")?.addEventListener("click", async () => {
+      const descInput = this.root.querySelector<HTMLInputElement>("#new-expense-desc");
+      const amountInput = this.root.querySelector<HTMLInputElement>("#new-expense-amount");
+      const desc = descInput?.value.trim();
+      const amount = Number.parseFloat(amountInput?.value || "");
+
+      if (!desc) {
+        this.showError("Ingresa una descripción para el gasto (ej. Habitación, Móvil).");
+        return;
+      }
+
+      if (Number.isNaN(amount) || amount <= 0) {
+        this.showError("Ingresa un importe válido mayor a 0.");
+        return;
+      }
+
+      await this.options?.onAddExpense?.(amount, desc);
+      if (descInput) descInput.value = "";
+      if (amountInput) amountInput.value = "";
+    });
+
+    // Delete Expense
+    this.root.querySelectorAll(".btn-delete-expense").forEach((btn) => {
+      btn.addEventListener("click", async (e) => {
+        const target = e.currentTarget as HTMLElement;
+        const id = target.getAttribute("data-id");
+        if (id) {
+          await this.options?.onDeleteExpense?.(id);
+        }
+      });
+    });
+
+    // Global Escape Key to Close Settings
+    document.addEventListener("keydown", (e) => {
+      if (e.key === "Escape" && this.isSettingsOpen) {
+        this.closeSettings();
       }
     });
   }

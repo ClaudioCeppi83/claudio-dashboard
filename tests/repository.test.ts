@@ -57,7 +57,39 @@ describe("Repository & BrowserStore", () => {
       rawMessageId: "raw-1",
     }, "raw content");
 
-    const exported = await repository.exportAllData();
-    expect(exported["deliveries.cld"]).toContain('"courier":"Claudio"');
-  });
+		const exported = await repository.exportAllData();
+		expect(exported["deliveries.cld"]).toContain('"courier":"Claudio"');
+	});
+
+	it("defaults to empty expenses array without hardcoded expenses", async () => {
+		const data = await repository.load();
+		expect(data.expenses).toEqual([]);
+	});
+
+	it("adds and deletes dynamic expenses correctly", async () => {
+		const expense = await repository.addExpense(60, "Gestoría autónomos", true);
+		expect(expense.id).toBeDefined();
+		expect(expense.amount).toBe(60);
+		expect(expense.recurring).toBe(true);
+
+		let data = await repository.load();
+		expect(data.expenses).toHaveLength(1);
+		expect(data.expenses[0]?.description).toBe("Gestoría autónomos");
+
+		await repository.deleteExpense(expense.id);
+		data = await repository.load();
+		expect(data.expenses).toHaveLength(0);
+	});
+
+	it("persists and updates settings", async () => {
+		await repository.saveSettings({
+			pricePerDelivery: 0.85,
+			currency: "EUR",
+			courierName: "Claudio Rossi",
+		});
+
+		const data = await repository.load();
+		expect(data.settings.pricePerDelivery).toBe(0.85);
+		expect(data.settings.courierName).toBe("Claudio Rossi");
+	});
 });

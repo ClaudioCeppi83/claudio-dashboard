@@ -18,6 +18,9 @@ export interface StorageDriver {
   /** Imports NDJSON formatted string into the specified storage key/collection. */
   importNDJSON(key: string, ndjson: string): Promise<number>;
 
+  /** Deletes a single record by its id from the specified storage key/collection. */
+  deleteItem(key: string, id: string): Promise<void>;
+
   /** Clears all storage keys managed by the driver. */
   clearAll(): Promise<void>;
 }

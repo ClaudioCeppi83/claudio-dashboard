@@ -98,21 +98,74 @@ describe("calculateMonth domain logic", () => {
     });
   });
 
-  it("handles months with zero deliveries gracefully", () => {
-    const data: DashboardData = {
-      deliveries: [],
-      debts: [],
-      expenses: [],
-      settings: { pricePerDelivery: 0.7, currency: "EUR" },
-      rawMessages: [],
-    };
+	it("handles months with zero deliveries gracefully", () => {
+		const data: DashboardData = {
+			deliveries: [],
+			debts: [],
+			expenses: [],
+			settings: { pricePerDelivery: 0.7, currency: "EUR" },
+			rawMessages: [],
+		};
 
-    const result = calculateMonth(data, "2026-08");
+		const result = calculateMonth(data, "2026-08");
 
-    expect(result.deliveries).toBe(0);
-    expect(result.grossIncome).toBe(0);
-    expect(result.net).toBe(0);
-    expect(result.averagePerActiveDay).toBe(0);
-    expect(result.dailyBreakdown).toHaveLength(0);
-  });
+		expect(result.deliveries).toBe(0);
+		expect(result.grossIncome).toBe(0);
+		expect(result.net).toBe(0);
+		expect(result.averagePerActiveDay).toBe(0);
+		expect(result.dailyBreakdown).toHaveLength(0);
+	});
+
+	it("differentiates recurring expenses from one-time dated expenses", () => {
+		const data: DashboardData = {
+			deliveries: [
+				{
+					id: "del-1",
+					courier: "Claudio",
+					route: "08918",
+					date: "2026-08-10",
+					received: 100,
+					incidents: 0,
+					delivered: 100,
+					rawMessageId: "raw-1",
+				},
+			],
+			debts: [],
+			expenses: [
+				{
+					id: "exp-rec",
+					amount: 50,
+					date: "2026-08-01",
+					description: "Gestoría",
+					recurring: true,
+				},
+				{
+					id: "exp-aug",
+					amount: 20,
+					date: "2026-08-15",
+					description: "Aceite moto agosto",
+					recurring: false,
+				},
+				{
+					id: "exp-sep",
+					amount: 30,
+					date: "2026-09-01",
+					description: "Rueda septiembre",
+					recurring: false,
+				},
+			],
+			settings: { pricePerDelivery: 1.0, currency: "EUR" },
+			rawMessages: [],
+		};
+
+		// August: 50 (recurring) + 20 (August one-time) = 70
+		const augResult = calculateMonth(data, "2026-08");
+		expect(augResult.expenses).toBe(70);
+		expect(augResult.grossIncome).toBe(100);
+		expect(augResult.net).toBe(30);
+
+		// September: 50 (recurring) + 30 (September one-time) = 80
+		const sepResult = calculateMonth(data, "2026-09");
+		expect(sepResult.expenses).toBe(80);
+	});
 });

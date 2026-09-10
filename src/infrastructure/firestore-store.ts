@@ -1,5 +1,6 @@
 import {
   collection,
+  deleteDoc,
   doc,
   getDocs,
   setDoc,
@@ -77,6 +78,13 @@ export class FirestoreStore implements StorageDriver {
       await this.append<T>(key, item);
     }
     return parsedItems.length;
+  }
+
+  /** Deletes a single record by its id from Firestore. */
+  async deleteItem(key: string, id: string): Promise<void> {
+    const cleanKey = this.sanitizeKey(key);
+    const docRef = doc(db, "users", this.userId, cleanKey, id);
+    await deleteDoc(docRef);
   }
 
   /** Clears all collections managed by Claudio Dashboard for this user in safe chunks. */
