@@ -37,7 +37,8 @@ export class Repository {
       { id: "expense-google", amount: 6, date: new Date().toISOString().slice(0, 10), description: "Google Pro", recurring: true },
     ];
 
-    return {\n      deliveries,
+    return {
+      deliveries,
       debts,
       expenses: expenses.length > 0 ? expenses : defaultExpenses,
       rawMessages,
